@@ -55,7 +55,15 @@ export async function objectExists(s3: S3Client, bucket: string, key: string): P
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // HeadObject returns no body on failure, so the SDK can't reliably
+    // populate error.name — only $metadata.httpStatusCode is trustworthy.
+    // A genuine 404 means "not uploaded"; anything else (403 permissions,
+    // 5xx, network) is an S3 problem, not proof the photo is missing, so
+    // let it propagate as a 500 instead of being misreported as such.
+    if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw err;
   }
 }
