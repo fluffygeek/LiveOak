@@ -35,11 +35,19 @@ export async function buildServer() {
   // Routes that call schema.parse() directly (rather than safeParse) land
   // here on bad input — map that to 400 instead of Fastify's default 500,
   // since it's the caller's fault, not the server's.
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: 'invalid_request', details: error.flatten() });
     }
-    return reply.send(error);
+    request.log.error(error);
+    // Never forward the raw error to the client — it can leak internals
+    // (e.g. Postgres constraint/column names). Only a Fastify-assigned 4xx
+    // (validation, not-found, etc.) is safe to pass through as-is.
+    const statusCode = error.statusCode ?? 500;
+    if (statusCode < 500) {
+      return reply.code(statusCode).send({ error: error.message });
+    }
+    return reply.code(500).send({ error: 'internal_server_error' });
   });
 
   await app.register(healthRoutes);

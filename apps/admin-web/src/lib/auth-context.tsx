@@ -1,11 +1,12 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import type { UserRole } from '@liveoak/shared-types';
 
 export type CurrentUser = {
   id: string;
   email: string;
-  role: 'technician' | 'payroll_admin' | 'app_admin';
+  role: UserRole;
   active: boolean;
 };
 
@@ -39,13 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const res = await fetch('/api/auth/refresh', { method: 'POST' });
-      if (res.ok) {
-        const { accessToken: token } = await res.json();
-        setAccessToken(token);
-        setUser(await fetchMe(token));
+      try {
+        const res = await fetch('/api/auth/refresh', { method: 'POST' });
+        if (res.ok) {
+          const { accessToken: token } = await res.json();
+          setAccessToken(token);
+          setUser(await fetchMe(token));
+        }
+      } catch {
+        // Network failure during session restore — fall through to signed-out.
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, []);
 
@@ -65,9 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setAccessToken(null);
-    setUser(null);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      setAccessToken(null);
+      setUser(null);
+    }
   }, []);
 
   return (

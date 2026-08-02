@@ -67,11 +67,22 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`Received ${signal}, shutting down gracefully...`);
-    await worker.close();
-    await queue.close();
+    let exitCode = 0;
+    try {
+      await worker.close();
+    } catch (error) {
+      exitCode = 1;
+      console.error('Worker shutdown failed:', error);
+    }
+    try {
+      await queue.close();
+    } catch (error) {
+      exitCode = 1;
+      console.error('Queue shutdown failed:', error);
+    }
     workerConnection.disconnect();
     queueConnection.disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));

@@ -5,8 +5,10 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
-  JWT_ACCESS_SECRET: z.string().min(1),
-  JWT_REFRESH_SECRET: z.string().min(1),
+  // 32 chars minimum so a short/low-entropy secret can't make HMAC-signed
+  // tokens forgeable.
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_REFRESH_SECRET: z.string().min(32),
   GOOGLE_OAUTH_CLIENT_ID_WEB: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID_IOS: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID_ANDROID: z.string().optional(),

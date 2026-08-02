@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { apiUrl, REFRESH_COOKIE_NAME } from '../../../../lib/api-url';
+import { fetchBackend, setRefreshCookie } from '../../../../lib/api-url';
 
 /**
  * Exchanges a Google ID token (from the browser's Google Identity Services
@@ -17,11 +17,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'missing_id_token' }, { status: 400 });
   }
 
-  const backendRes = await fetch(`${apiUrl()}/auth/google`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
-  });
+  let backendRes: Response;
+  try {
+    backendRes = await fetchBackend('/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+  } catch {
+    return NextResponse.json({ error: 'backend_unreachable' }, { status: 502 });
+  }
 
   if (!backendRes.ok) {
     const body = await backendRes.json().catch(() => ({}));
@@ -30,12 +35,6 @@ export async function POST(request: NextRequest) {
 
   const { accessToken, refreshToken } = await backendRes.json();
   const response = NextResponse.json({ accessToken });
-  response.cookies.set(REFRESH_COOKIE_NAME, refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days, matches backend refresh token expiry
-  });
+  setRefreshCookie(response, refreshToken);
   return response;
 }
