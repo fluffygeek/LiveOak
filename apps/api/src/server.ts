@@ -14,6 +14,8 @@ import { userRoutes } from './routes/users.js';
 import { jobDraftRoutes } from './routes/jobDrafts.js';
 import { jobRoutes } from './routes/jobs.js';
 import { workCodeRoutes } from './routes/workCodes.js';
+import { payrollJobRoutes } from './routes/payrollJobs.js';
+import { discrepancyReasonRoutes } from './routes/discrepancyReasons.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -64,10 +66,12 @@ export async function buildServer() {
   await app.register(jobDraftRoutes);
   await app.register(jobRoutes);
   await app.register(workCodeRoutes);
+  await app.register(payrollJobRoutes);
+  await app.register(discrepancyReasonRoutes);
 
-  // Remaining role-scoped route groups (payroll admin record edits, config)
-  // register here as they're implemented in Phases 3-5 — see the API
-  // surface section of the design plan for the full list.
+  // Remaining route groups (duplicate review, app_admin config) register
+  // here as they're implemented in Phases 4-5 — see the API surface
+  // section of the design plan for the full list.
 
   return app;
 }

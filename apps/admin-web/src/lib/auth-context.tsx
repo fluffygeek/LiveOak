@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { UserRole } from '@liveoak/shared-types';
 
 export type CurrentUser = {
@@ -16,6 +16,8 @@ interface AuthContextValue {
   loading: boolean;
   signInWithIdToken: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Re-hydrates the access token from the httpOnly refresh cookie — used by the API client on a 401. */
+  refreshAccessToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,18 +39,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  // The backend rotates refresh tokens on every use, so concurrent 401s must
+  // share one refresh call — otherwise the second caller's now-stale token
+  // gets rejected and incorrectly signs the user out of a valid session.
+  const refreshInFlight = useRef<Promise<string | null> | null>(null);
+
+  const refreshAccessToken = useCallback((): Promise<string | null> => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+
+    refreshInFlight.current = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', { method: 'POST' });
+        if (!res.ok) {
+          setAccessToken(null);
+          setUser(null);
+          return null;
+        }
+        const { accessToken: token } = await res.json();
+        setAccessToken(token);
+        return token as string;
+      } catch {
+        return null;
+      }
+    })();
+
+    return refreshInFlight.current.finally(() => {
+      refreshInFlight.current = null;
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/auth/refresh', { method: 'POST' });
-        if (res.ok) {
-          const { accessToken: token } = await res.json();
-          setAccessToken(token);
-          setUser(await fetchMe(token));
-        }
-      } catch {
-        // Network failure during session restore — fall through to signed-out.
+        const token = await refreshAccessToken();
+        if (token) setUser(await fetchMe(token));
       } finally {
         setLoading(false);
       }
@@ -80,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ accessToken, user, loading, signInWithIdToken, signOut }}>
+    <AuthContext.Provider value={{ accessToken, user, loading, signInWithIdToken, signOut, refreshAccessToken }}>
       {children}
     </AuthContext.Provider>
   );

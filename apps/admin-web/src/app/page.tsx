@@ -1,13 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuth } from '../lib/auth-context';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 
-/**
- * Phase 1 scope: login only. Once signed in, this shows the authenticated
- * user's profile (from GET /me) as proof the auth flow works end to end;
- * the records dashboard and other admin screens are built in Phase 3+.
- */
 export default function HomePage() {
   const { user, loading, signOut } = useAuth();
 
@@ -31,6 +27,11 @@ export default function HomePage() {
       <p>
         Signed in as {user.email} ({user.role})
       </p>
+      {(user.role === 'payroll_admin' || user.role === 'app_admin') && (
+        <p>
+          <Link href="/records">View Records →</Link>
+        </p>
+      )}
       <button onClick={() => void signOut()}>Sign out</button>
     </main>
   );
