@@ -3,6 +3,9 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  // Railway (and most PaaS hosts) assign the listen port dynamically via
+  // `PORT` — when set, it takes precedence over API_PORT.
+  PORT: z.coerce.number().int().min(1).max(65535).optional(),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   // 32 chars minimum so a short/low-entropy secret can't make HMAC-signed
