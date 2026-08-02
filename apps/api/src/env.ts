@@ -15,6 +15,7 @@ const envSchema = z.object({
   USPS_CLIENT_SECRET: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
+  CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
 export type Env = z.infer<typeof envSchema>;

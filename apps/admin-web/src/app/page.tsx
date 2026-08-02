@@ -1,14 +1,37 @@
+'use client';
+
+import { useAuth } from '../lib/auth-context';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
+
 /**
- * Placeholder landing/login page. Real implementation (Phase 1) verifies the
- * Google ID token server-side against the same /auth/google logic the API
- * uses for mobile, per the design plan's "one source of truth for auth rules"
- * decision.
+ * Phase 1 scope: login only. Once signed in, this shows the authenticated
+ * user's profile (from GET /me) as proof the auth flow works end to end;
+ * the records dashboard and other admin screens are built in Phase 3+.
  */
-export default function LoginPage() {
+export default function HomePage() {
+  const { user, loading, signOut } = useAuth();
+
+  if (loading) {
+    return <p>Loading…</p>;
+  }
+
+  if (!user) {
+    return (
+      <main>
+        <h1>LiveOak Admin</h1>
+        <p>Sign in with your company Google account.</p>
+        <GoogleSignInButton />
+      </main>
+    );
+  }
+
   return (
     <main>
       <h1>LiveOak Admin</h1>
-      <p>Sign-in with Google (Workspace-restricted) — Phase 1.</p>
+      <p>
+        Signed in as {user.email} ({user.role})
+      </p>
+      <button onClick={() => void signOut()}>Sign out</button>
     </main>
   );
 }

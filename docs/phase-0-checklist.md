@@ -41,13 +41,13 @@ be fully wired up (auth, address verification) until these are done.
 ## 4. Bootstrap the first application administrator
 - [ ] Once a dev database exists, run `pnpm db:migrate` to apply
       `packages/db/migrations/0001_init.sql`.
-- [ ] Manually insert the first `app_admin` user row (there's a
-      chicken-and-egg problem: someone has to exist before "admins add
-      users" works). Example:
-      ```sql
-      INSERT INTO users (email, role, display_name)
-      VALUES ('you@yourcompany.com', 'app_admin', 'Your Name');
+- [ ] Create the first `app_admin` (there's a chicken-and-egg problem:
+      someone has to exist before "admins add users via POST /users" works):
+      ```bash
+      pnpm db:seed-admin -- --email=you@yourcompany.com --name="Your Name"
       ```
+      Safe to re-run — it upserts by email and promotes an existing row to
+      `app_admin` if one exists.
 
 ## 5. Local development
 ```bash

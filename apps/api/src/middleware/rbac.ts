@@ -12,13 +12,26 @@ declare module 'fastify' {
   }
 }
 
+interface AccessTokenPayload {
+  id: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+}
+
 /**
  * Verifies the LiveOak JWT and attaches the decoded user to the request.
  * Route handlers should never trust a role/identity claim that didn't pass through this.
  */
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
-    await request.jwtVerify();
+    const payload = await request.jwtVerify<AccessTokenPayload>();
+    request.currentUser = {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+      active: payload.active,
+    };
   } catch {
     reply.code(401).send({ error: 'unauthorized' });
   }

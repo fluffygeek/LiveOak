@@ -15,6 +15,7 @@
     "dev:mobile": "pnpm --filter @liveoak/mobile start",
     "db:generate": "pnpm --filter @liveoak/db generate",
     "db:migrate": "pnpm --filter @liveoak/db migrate",
+    "db:seed-admin": "pnpm --filter @liveoak/db seed:admin",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test"
