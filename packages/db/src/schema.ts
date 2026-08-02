@@ -111,6 +111,21 @@ export const jobDrafts = pgTable('job_drafts', {
 });
 
 /**
+ * Photos attached to an in-progress draft, before the job is submitted.
+ * Moved into `job_photos` (and this table's rows discarded) atomically at
+ * submit time — see routes/jobDrafts.ts.
+ */
+export const jobDraftPhotos = pgTable('job_draft_photos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  draftId: uuid('draft_id')
+    .notNull()
+    .references(() => jobDrafts.id, { onDelete: 'cascade' }),
+  s3Key: text('s3_key').notNull().unique(),
+  contentType: text('content_type'),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Core job record table. Physically partitioned by `state` (LIST partitioning).
  * The partition DDL itself is hand-authored in migrations/0001_init.sql — Drizzle's
  * migration generator does not emit `PARTITION BY` clauses, so this table definition

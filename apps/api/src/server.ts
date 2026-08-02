@@ -2,18 +2,24 @@ import Fastify from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
 import { ZodError } from 'zod';
+import type { S3Client } from '@aws-sdk/client-s3';
 import { createDb, type Db } from '@liveoak/db';
 import { loadEnv, type Env } from './env.js';
 import { authenticate } from './middleware/rbac.js';
+import { createS3Client } from './lib/s3.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { userRoutes } from './routes/users.js';
+import { jobDraftRoutes } from './routes/jobDrafts.js';
+import { jobRoutes } from './routes/jobs.js';
+import { workCodeRoutes } from './routes/workCodes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     env: Env;
     db: Db;
+    s3: S3Client;
   }
 }
 
@@ -23,6 +29,7 @@ export async function buildServer() {
 
   app.decorate('env', env);
   app.decorate('db', createDb(env.DATABASE_URL));
+  app.decorate('s3', createS3Client(env));
 
   await app.register(fastifyCors, {
     origin: env.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
@@ -54,10 +61,13 @@ export async function buildServer() {
   await app.register(authRoutes);
   await app.register(meRoutes);
   await app.register(userRoutes);
+  await app.register(jobDraftRoutes);
+  await app.register(jobRoutes);
+  await app.register(workCodeRoutes);
 
-  // Remaining role-scoped route groups (job drafts/submission, payroll admin
-  // record edits, config) register here as they're implemented in Phases
-  // 2-5 — see the API surface section of the design plan for the full list.
+  // Remaining role-scoped route groups (payroll admin record edits, config)
+  // register here as they're implemented in Phases 3-5 — see the API
+  // surface section of the design plan for the full list.
 
   return app;
 }

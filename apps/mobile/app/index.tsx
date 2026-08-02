@@ -1,14 +1,18 @@
-import { Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
+import { Redirect } from 'expo-router';
+import { useAuth } from '../src/lib/auth-context';
 
-/**
- * Placeholder home screen. Real implementation (Phase 2) branches on
- * sign-in state and an existing draft job — see the mobile flow diagram
- * in the design plan (docs, §4).
- */
-export default function Home() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>LiveOak Technician — Phase 2 (Google Sign-In + job submission)</Text>
-    </View>
-  );
+/** Entry point: routes to login or home based on restored session state. */
+export default function Index() {
+  const { loading, user } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  return <Redirect href={user ? '/home' : '/login'} />;
 }
