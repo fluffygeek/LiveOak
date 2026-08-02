@@ -78,14 +78,33 @@ export async function verifyAddressWithUsps(env: Env, address: AddressInput): Pr
     });
     if (address.addressLine2) params.set('secondaryAddress', address.addressLine2);
 
-    const res = await fetch(`${USPS_ADDRESS_URL}?${params.toString()}`, {
+    let res = await fetch(`${USPS_ADDRESS_URL}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-    if (res.status === 404 || res.status === 400) {
-      // USPS couldn't match the address — a real "failed", not an outage.
+    if (res.status === 401 || res.status === 403) {
+      // Cached token was rejected before its recorded expiry (early
+      // revocation, clock skew) — drop it and retry once with a fresh one.
+      cachedToken = null;
+      const freshToken = await getAccessToken(env);
+      res = await fetch(`${USPS_ADDRESS_URL}?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${freshToken}` },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    }
+
+    if (res.status === 404) {
+      // A definite "no match" — a real failure, not an outage.
       return { status: 'failed' };
+    }
+    if (res.status === 400) {
+      // Ambiguous: USPS returns 400 for both malformed requests and some
+      // unmatchable addresses. Log it for diagnosis but don't tell the
+      // technician their (possibly valid) address is wrong — degrade to
+      // unavailable instead.
+      console.error('USPS address request returned 400:', await res.text().catch(() => '<unreadable body>'));
+      return { status: 'unavailable' };
     }
     if (!res.ok) {
       return { status: 'unavailable' };

@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Env } from '../env.js';
 
 const UPLOAD_URL_TTL_SECONDS = 300;
 const DOWNLOAD_URL_TTL_SECONDS = 300;
+
+const ALLOWED_PHOTO_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/heic', 'image/webp']);
+
+export function isAllowedPhotoContentType(contentType: string): boolean {
+  return ALLOWED_PHOTO_CONTENT_TYPES.has(contentType.toLowerCase());
+}
 
 export function createS3Client(env: Env): S3Client {
   return new S3Client({
@@ -37,4 +43,19 @@ export async function createPhotoUploadUrl(
 export function createPhotoDownloadUrl(s3: S3Client, bucket: string, key: string): Promise<string> {
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
   return getSignedUrl(s3, command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
+}
+
+/**
+ * Confirms a photo was actually uploaded before the API trusts a
+ * client-reported key — otherwise a technician could report a fabricated or
+ * someone-else's-draft key to satisfy the required-photo-count gate without
+ * uploading anything. See routes/jobDrafts.ts's photos/confirm handler.
+ */
+export async function objectExists(s3: S3Client, bucket: string, key: string): Promise<boolean> {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
 }

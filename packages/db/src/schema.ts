@@ -12,6 +12,7 @@ import {
   integer,
   primaryKey,
   unique,
+  index,
   customType,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -115,15 +116,21 @@ export const jobDrafts = pgTable('job_drafts', {
  * Moved into `job_photos` (and this table's rows discarded) atomically at
  * submit time — see routes/jobDrafts.ts.
  */
-export const jobDraftPhotos = pgTable('job_draft_photos', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  draftId: uuid('draft_id')
-    .notNull()
-    .references(() => jobDrafts.id, { onDelete: 'cascade' }),
-  s3Key: text('s3_key').notNull().unique(),
-  contentType: text('content_type'),
-  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const jobDraftPhotos = pgTable(
+  'job_draft_photos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    draftId: uuid('draft_id')
+      .notNull()
+      .references(() => jobDrafts.id, { onDelete: 'cascade' }),
+    s3Key: text('s3_key').notNull().unique(),
+    contentType: text('content_type'),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    draftIdx: index('idx_job_draft_photos_draft').on(table.draftId),
+  }),
+);
 
 /**
  * Core job record table. Physically partitioned by `state` (LIST partitioning).

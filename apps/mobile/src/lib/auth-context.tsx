@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import type { UserRole } from '@liveoak/shared-types';
 import { apiUrl } from './api-url';
+import { fetchWithTimeout } from './fetch-with-timeout';
 
 export type CurrentUser = {
   id: string;
@@ -26,7 +27,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function fetchMe(accessToken: string): Promise<CurrentUser | null> {
-  const res = await fetch(`${apiUrl()}/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await fetchWithTimeout(`${apiUrl()}/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) return null;
   return res.json();
 }
@@ -40,6 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  // Refresh tokens are rotated server-side on every use, so two concurrent
+  // 401s (e.g. two screens fetching in parallel) must share one refresh
+  // call — otherwise the second request's stale token gets rejected and
+  // incorrectly signs the user out of a perfectly valid session.
+  const refreshInFlight = useRef<Promise<string | null> | null>(null);
 
   const persistTokens = useCallback(async (access: string, refresh: string) => {
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, access);
@@ -54,26 +60,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
-    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    if (!refreshToken) return null;
-    try {
-      const res = await fetch(`${apiUrl()}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) {
-        await clearTokens();
+  const refreshAccessToken = useCallback((): Promise<string | null> => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+
+    refreshInFlight.current = (async () => {
+      const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+      if (!refreshToken) return null;
+      try {
+        const res = await fetchWithTimeout(`${apiUrl()}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!res.ok) {
+          await clearTokens();
+          return null;
+        }
+        const { accessToken: newAccess, refreshToken: newRefresh } = await res.json();
+        await persistTokens(newAccess, newRefresh);
+        return newAccess;
+      } catch {
         return null;
       }
-      const { accessToken: newAccess, refreshToken: newRefresh } = await res.json();
-      await persistTokens(newAccess, newRefresh);
-      return newAccess;
-    } catch {
-      return null;
-    }
+    })();
+
+    return refreshInFlight.current.finally(() => {
+      refreshInFlight.current = null;
+    });
   }, [clearTokens, persistTokens]);
 
   useEffect(() => {
@@ -98,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithIdToken = useCallback(
     async (idToken: string) => {
-      const res = await fetch(`${apiUrl()}/auth/google`, {
+      const res = await fetchWithTimeout(`${apiUrl()}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
@@ -109,9 +122,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const { accessToken: access, refreshToken: refresh } = await res.json();
       await persistTokens(access, refresh);
-      setUser(await fetchMe(access));
+      const me = await fetchMe(access);
+      if (!me) {
+        // Token exchange succeeded but the profile lookup failed — don't
+        // leave the caller in a half-signed-in state with user === null.
+        await clearTokens();
+        throw new Error('profile_fetch_failed');
+      }
+      setUser(me);
     },
-    [persistTokens],
+    [clearTokens, persistTokens],
   );
 
   const signOut = useCallback(async () => {

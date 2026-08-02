@@ -16,4 +16,5 @@ INSERT INTO work_codes (code, description, required_photo_count) VALUES
   ('STD-INSTALL', 'Standard installation', 3),
   ('SPLICE', 'Splice/repair work', 3),
   ('AERIAL-DROP', 'Aerial drop install', 4),
-  ('UNDERGROUND-DROP', 'Underground drop install', 5);
+  ('UNDERGROUND-DROP', 'Underground drop install', 5)
+ON CONFLICT (code) DO NOTHING;

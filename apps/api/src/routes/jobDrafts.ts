@@ -3,17 +3,20 @@ import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { jobDrafts, jobDraftPhotos, jobs, jobPhotos, workCodes, auditLog } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
-import { createPhotoUploadUrl } from '../lib/s3.js';
+import { createPhotoUploadUrl, isAllowedPhotoContentType, objectExists } from '../lib/s3.js';
 import { verifyAddressWithUsps } from '../lib/usps.js';
+
+const UNIQUE_VIOLATION = '23505';
 
 const draftPatchBody = z.object({
   jobNumber: z.string().min(1).optional(),
   workCodeId: z.string().uuid().optional(),
-  footage: z.number().positive().optional(),
-  notes: z.string().optional(),
+  // null explicitly clears a previously-set value; omitted leaves it untouched.
+  footage: z.number().positive().nullable().optional(),
+  notes: z.string().nullable().optional(),
   isNewBuild: z.boolean().optional(),
   addressLine1: z.string().min(1).optional(),
-  addressLine2: z.string().optional(),
+  addressLine2: z.string().nullable().optional(),
   city: z.string().min(1).optional(),
   state: z
     .string()
@@ -44,6 +47,11 @@ function touchesAddress(body: Record<string, unknown>): boolean {
 }
 
 const SUBMITTABLE_VERIFICATION_STATUSES = ['verified', 'skipped_new_build', 'unavailable'] as const;
+type SubmittableStatus = (typeof SUBMITTABLE_VERIFICATION_STATUSES)[number];
+
+function isSubmittableStatus(status: string | null): status is SubmittableStatus {
+  return (SUBMITTABLE_VERIFICATION_STATUSES as readonly string[]).includes(status ?? '');
+}
 
 /**
  * Technician job-draft lifecycle: create/resume the single in-progress
@@ -64,15 +72,23 @@ export async function jobDraftRoutes(app: FastifyInstance) {
 
   // Idempotent: returns the technician's existing draft if one is open,
   // otherwise creates a new (empty) one. The unique index on technician_id
-  // in job_drafts is what actually enforces "one draft at a time".
+  // in job_drafts is what actually enforces "one draft at a time"; the
+  // catch below handles two concurrent creates racing that constraint.
   app.post('/jobs/draft', { preHandler: guards }, async (request, reply) => {
     const technicianId = request.currentUser!.id;
     const [existing] = await app.db.select().from(jobDrafts).where(eq(jobDrafts.technicianId, technicianId));
     if (existing) {
       return reply.send(existing);
     }
-    const [created] = await app.db.insert(jobDrafts).values({ technicianId }).returning();
-    return reply.code(201).send(created);
+    try {
+      const [created] = await app.db.insert(jobDrafts).values({ technicianId }).returning();
+      return reply.code(201).send(created);
+    } catch (err) {
+      if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;
+      // Lost the race against a concurrent create — return the winner's draft.
+      const [draft] = await app.db.select().from(jobDrafts).where(eq(jobDrafts.technicianId, technicianId));
+      return reply.send(draft);
+    }
   });
 
   app.patch<{ Params: { id: string } }>('/jobs/draft/:id', { preHandler: guards }, async (request, reply) => {
@@ -95,7 +111,7 @@ export async function jobDraftRoutes(app: FastifyInstance) {
       updates.addressVerificationCheckedAt = null;
     }
     if (body.footage !== undefined) {
-      updates.footage = String(body.footage);
+      updates.footage = body.footage === null ? null : String(body.footage);
     }
 
     const [updated] = await app.db.update(jobDrafts).set(updates).where(eq(jobDrafts.id, draft.id)).returning();
@@ -126,6 +142,9 @@ export async function jobDraftRoutes(app: FastifyInstance) {
     { preHandler: guards },
     async (request, reply) => {
       const body = presignBody.parse(request.body);
+      if (!isAllowedPhotoContentType(body.contentType)) {
+        return reply.code(400).send({ error: 'unsupported_content_type' });
+      }
       const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
       if (!draft) {
         return reply.code(404).send({ error: 'draft_not_found' });
@@ -139,7 +158,10 @@ export async function jobDraftRoutes(app: FastifyInstance) {
   );
 
   // Called by the client after the direct-to-S3 PUT succeeds, to register
-  // the photo against the draft.
+  // the photo against the draft. The key must be one this API presigned for
+  // this draft, and the object must actually exist in the bucket — otherwise
+  // a technician could report a fabricated or another draft's key to satisfy
+  // the required-photo-count gate at submit time without uploading anything.
   app.post<{ Params: { id: string } }>(
     '/jobs/draft/:id/photos/confirm',
     { preHandler: guards },
@@ -148,6 +170,15 @@ export async function jobDraftRoutes(app: FastifyInstance) {
       const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
       if (!draft) {
         return reply.code(404).send({ error: 'draft_not_found' });
+      }
+      if (!body.key.startsWith(`job-photos/${draft.id}/`)) {
+        return reply.code(400).send({ error: 'invalid_photo_key' });
+      }
+      if (!app.env.S3_BUCKET) {
+        return reply.code(500).send({ error: 'photo_storage_not_configured' });
+      }
+      if (!(await objectExists(app.s3, app.env.S3_BUCKET, body.key))) {
+        return reply.code(400).send({ error: 'photo_not_uploaded' });
       }
       const [photo] = await app.db
         .insert(jobDraftPhotos)
@@ -204,7 +235,15 @@ export async function jobDraftRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Params: { id: string } }>('/jobs/draft/:id/submit', { preHandler: guards }, async (request, reply) => {
-    const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+    const technicianId = request.currentUser!.id;
+    const draftId = request.params.id;
+
+    // Pre-transaction checks give fast, specific error responses for the
+    // common case (incomplete form, missing photos). The transaction below
+    // re-validates everything against a row lock so two concurrent submits
+    // of the same draft (a double-tap or a client retry) can't both finalize
+    // a job — the second one finds the draft already gone and gets a 409.
+    const draft = await loadOwnedDraft(technicianId, draftId);
     if (!draft) {
       return reply.code(404).send({ error: 'draft_not_found' });
     }
@@ -222,7 +261,7 @@ export async function jobDraftRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'incomplete_draft' });
     }
 
-    if (!SUBMITTABLE_VERIFICATION_STATUSES.includes(draft.addressVerificationStatus as never)) {
+    if (!isSubmittableStatus(draft.addressVerificationStatus)) {
       return reply.code(400).send({ error: 'address_not_verified' });
     }
 
@@ -241,27 +280,39 @@ export async function jobDraftRoutes(app: FastifyInstance) {
     }
 
     const created = await app.db.transaction(async (tx) => {
+      // Lock the draft row and re-read it: if a concurrent submit already
+      // deleted it, this returns nothing and we abort instead of inserting
+      // a duplicate job.
+      const [locked] = await tx
+        .select()
+        .from(jobDrafts)
+        .where(and(eq(jobDrafts.id, draftId), eq(jobDrafts.technicianId, technicianId)))
+        .for('update');
+      if (!locked) {
+        return null;
+      }
+
       const [job] = await tx
         .insert(jobs)
         .values({
-          state: draft.state as string,
-          jobNumber: draft.jobNumber as string,
-          technicianId: draft.technicianId,
-          workCodeId: draft.workCodeId as string,
-          footage: draft.footage as string,
-          notes: draft.notes,
-          addressLine1: draft.addressLine1 as string,
-          addressLine2: draft.addressLine2,
-          city: draft.city as string,
-          zip: draft.zip as string,
-          isNewBuild: draft.isNewBuild,
-          verifiedAddressLine1: draft.verifiedAddressLine1,
-          verifiedCity: draft.verifiedCity,
-          verifiedState: draft.verifiedState,
-          verifiedZip: draft.verifiedZip,
-          verifiedZip4: draft.verifiedZip4,
-          addressVerificationStatus: draft.addressVerificationStatus,
-          addressVerificationCheckedAt: draft.addressVerificationCheckedAt,
+          state: locked.state as string,
+          jobNumber: locked.jobNumber as string,
+          technicianId: locked.technicianId,
+          workCodeId: locked.workCodeId as string,
+          footage: locked.footage as string,
+          notes: locked.notes,
+          addressLine1: locked.addressLine1 as string,
+          addressLine2: locked.addressLine2,
+          city: locked.city as string,
+          zip: locked.zip as string,
+          isNewBuild: locked.isNewBuild,
+          verifiedAddressLine1: locked.verifiedAddressLine1,
+          verifiedCity: locked.verifiedCity,
+          verifiedState: locked.verifiedState,
+          verifiedZip: locked.verifiedZip,
+          verifiedZip4: locked.verifiedZip4,
+          addressVerificationStatus: locked.addressVerificationStatus,
+          addressVerificationCheckedAt: locked.addressVerificationCheckedAt,
         })
         .returning();
       if (!job) {
@@ -283,15 +334,19 @@ export async function jobDraftRoutes(app: FastifyInstance) {
       await tx.insert(auditLog).values({
         jobId: job.id,
         jobState: job.state,
-        actorId: request.currentUser!.id,
+        actorId: technicianId,
         action: 'submitted',
       });
 
       // Cascades to job_draft_photos.
-      await tx.delete(jobDrafts).where(eq(jobDrafts.id, draft.id));
+      await tx.delete(jobDrafts).where(eq(jobDrafts.id, locked.id));
 
       return job;
     });
+
+    if (!created) {
+      return reply.code(409).send({ error: 'already_submitted' });
+    }
 
     return reply.code(201).send(created);
   });

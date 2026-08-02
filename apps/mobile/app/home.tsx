@@ -17,14 +17,20 @@ export default function Home() {
   const { apiFetch } = useApiClient();
   const [draft, setDraft] = useState<JobDraft | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const loadDraft = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await apiFetch('/jobs/draft', { method: 'POST' });
       if (res.ok) {
         setDraft(await res.json());
+      } else {
+        setLoadError(true);
       }
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -40,6 +46,15 @@ export default function Home() {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
+        <Text>Could not load your account. Check your connection and try again.</Text>
+        <Button title="Retry" onPress={loadDraft} />
       </View>
     );
   }

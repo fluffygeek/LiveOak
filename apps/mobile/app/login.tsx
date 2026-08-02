@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuth } from '../src/lib/auth-context';
-import { signInWithGoogle } from '../src/lib/google-signin';
+import { signInWithGoogle, isSignInCancelled } from '../src/lib/google-signin';
 
 export default function Login() {
   const { user, signInWithIdToken } = useAuth();
@@ -19,7 +19,8 @@ export default function Login() {
     try {
       const idToken = await signInWithGoogle();
       await signInWithIdToken(idToken);
-    } catch {
+    } catch (err) {
+      if (isSignInCancelled(err)) return;
       setError('Account not authorized, or sign-in failed. Contact your admin.');
     } finally {
       setSigningIn(false);

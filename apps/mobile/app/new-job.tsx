@@ -82,6 +82,21 @@ export default function NewJob() {
 
   async function saveDraft(): Promise<JobDraft | null> {
     if (!draft) return null;
+
+    // Validate locally so a stray non-numeric footage value doesn't silently
+    // turn into `undefined` (dropped from the request) or a rejected `null`.
+    let footageValue: number | null;
+    if (footage.trim() === '') {
+      footageValue = null;
+    } else {
+      const parsed = Number(footage);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError('Footage must be a positive number.');
+        return null;
+      }
+      footageValue = parsed;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -91,11 +106,14 @@ export default function NewJob() {
         body: JSON.stringify({
           jobNumber: jobNumber || undefined,
           workCodeId: workCodeId || undefined,
-          footage: footage ? Number(footage) : undefined,
-          notes: notes || undefined,
+          footage: footageValue,
+          // null (not omitted) so a technician can clear a previously-set
+          // value — the API distinguishes "clear" (null) from "leave
+          // untouched" (omitted).
+          notes: notes || null,
           isNewBuild,
           addressLine1: addressLine1 || undefined,
-          addressLine2: addressLine2 || undefined,
+          addressLine2: addressLine2 || null,
           city: city || undefined,
           state: state || undefined,
           zip: zip || undefined,
@@ -186,7 +204,16 @@ export default function NewJob() {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
-          await apiFetch(`/jobs/draft/${draft.id}`, { method: 'DELETE' });
+          try {
+            const res = await apiFetch(`/jobs/draft/${draft.id}`, { method: 'DELETE' });
+            if (!res.ok) {
+              setError('Could not discard this job. Try again.');
+              return;
+            }
+          } catch {
+            setError('Could not discard this job. Check your connection.');
+            return;
+          }
           router.replace('/home');
         },
       },
