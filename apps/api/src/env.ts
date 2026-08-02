@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  API_PORT: z.coerce.number().default(4000),
+  API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(1),
@@ -10,7 +10,9 @@ const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID_WEB: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID_IOS: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_ID_ANDROID: z.string().optional(),
-  GOOGLE_WORKSPACE_DOMAIN: z.string().optional(),
+  // Required, not optional: /auth/google's Workspace-domain restriction is a
+  // core security control (design plan §7) and must not silently no-op.
+  GOOGLE_WORKSPACE_DOMAIN: z.string().min(1),
   USPS_CLIENT_ID: z.string().optional(),
   USPS_CLIENT_SECRET: z.string().optional(),
   S3_BUCKET: z.string().optional(),

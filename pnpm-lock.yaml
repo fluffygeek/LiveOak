@@ -156,7 +156,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       bullmq:
-        specifier: ^5.12.9
+        specifier: ^5.16.0
         version: 5.81.3
       ioredis:
         specifier: ^5.4.1

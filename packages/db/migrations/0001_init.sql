@@ -134,6 +134,7 @@ CREATE TABLE job_photos (
   uploaded_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (job_id, job_state) REFERENCES jobs(id, state)
 );
+CREATE INDEX idx_job_photos_job ON job_photos (job_id, job_state);
 
 CREATE TABLE duplicate_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -145,6 +146,7 @@ CREATE TABLE duplicate_links (
   FOREIGN KEY (job_id, job_state) REFERENCES jobs(id, state),
   UNIQUE (duplicate_group_id, job_id)
 );
+CREATE INDEX idx_duplicate_links_job ON duplicate_links (job_id, job_state);
 
 -- Append-only audit trail. INSERT-only grant applied below.
 CREATE TABLE audit_log (
@@ -159,6 +161,8 @@ CREATE TABLE audit_log (
   occurred_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (job_id, job_state) REFERENCES jobs(id, state)
 );
+CREATE INDEX idx_audit_log_job ON audit_log (job_id, job_state);
+CREATE INDEX idx_audit_log_actor ON audit_log (actor_id);
 
 CREATE TABLE distribution_list (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

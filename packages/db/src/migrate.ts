@@ -30,8 +30,13 @@ async function main() {
     if (applied.has(file)) continue;
     const contents = readFileSync(join(migrationsDir, file), 'utf-8');
     console.log(`Applying migration ${file}...`);
-    await sql.unsafe(contents);
-    await sql`INSERT INTO _migrations (name) VALUES (${file})`;
+    // Run the migration and its bookkeeping row in one transaction so a crash
+    // between the two can't leave a migration applied-but-unrecorded (which
+    // would make the next run retry it and fail on e.g. a duplicate CREATE TYPE).
+    await sql.begin(async (tx) => {
+      await tx.unsafe(contents);
+      await tx`INSERT INTO _migrations (name) VALUES (${file})`;
+    });
   }
 
   await sql.end();

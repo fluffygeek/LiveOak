@@ -3,6 +3,7 @@ import {
   pgEnum,
   uuid,
   text,
+  char,
   boolean,
   numeric,
   timestamp,
@@ -120,7 +121,7 @@ export const jobs = pgTable(
   'jobs',
   {
     id: uuid('id').notNull().defaultRandom(),
-    state: text('state').notNull(),
+    state: char('state', { length: 2 }).notNull(),
     jobNumber: text('job_number').notNull(),
     technicianId: uuid('technician_id')
       .notNull()
@@ -172,7 +173,7 @@ export const jobs = pgTable(
 export const jobPhotos = pgTable('job_photos', {
   id: uuid('id').primaryKey().defaultRandom(),
   jobId: uuid('job_id').notNull(),
-  jobState: text('job_state').notNull(),
+  jobState: char('job_state', { length: 2 }).notNull(),
   s3Key: text('s3_key').notNull().unique(),
   contentType: text('content_type'),
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
@@ -184,7 +185,7 @@ export const duplicateLinks = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     duplicateGroupId: uuid('duplicate_group_id').notNull(),
     jobId: uuid('job_id').notNull(),
-    jobState: text('job_state').notNull(),
+    jobState: char('job_state', { length: 2 }).notNull(),
     detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
     detectionMethod: text('detection_method').notNull().default('normalized_address_match'),
   },
@@ -194,14 +195,15 @@ export const duplicateLinks = pgTable(
 );
 
 /**
- * Append-only. Application DB role has INSERT only on this table
- * (see migrations/0001_init.sql `REVOKE UPDATE, DELETE`) so audit
- * history cannot be altered even by a buggy handler.
+ * Intended to be append-only: migrations/0001_init.sql has a commented-out
+ * `REVOKE UPDATE, DELETE` statement to enforce that at the DB-role level,
+ * pending the runtime app role being provisioned. Until that's uncommented
+ * and applied, immutability here is a convention, not an enforced guarantee.
  */
 export const auditLog = pgTable('audit_log', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   jobId: uuid('job_id').notNull(),
-  jobState: text('job_state').notNull(),
+  jobState: char('job_state', { length: 2 }).notNull(),
   actorId: uuid('actor_id')
     .notNull()
     .references(() => users.id),

@@ -40,7 +40,12 @@ async function findActiveUserById(db: Db, id: string) {
  */
 export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/google', async (request, reply) => {
-    const body = googleSignInBody.parse(request.body);
+    const parsed = googleSignInBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_request' });
+    }
+    const body = parsed.data;
+
     const clientIds = [
       app.env.GOOGLE_OAUTH_CLIENT_ID_WEB,
       app.env.GOOGLE_OAUTH_CLIENT_ID_IOS,
@@ -51,12 +56,20 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: 'google_oauth_not_configured' });
     }
 
-    const identity = await verifyGoogleIdToken(body.idToken, clientIds);
+    // Any failure here means Google rejected the token as invalid/expired/malformed
+    // (bad signature, audience mismatch, etc.) — that's a client-correctable 401,
+    // not a server error.
+    let identity;
+    try {
+      identity = await verifyGoogleIdToken(body.idToken, clientIds);
+    } catch {
+      return reply.code(401).send({ error: 'invalid_id_token' });
+    }
 
     if (!identity.emailVerified) {
       return reply.code(401).send({ error: 'email_not_verified' });
     }
-    if (app.env.GOOGLE_WORKSPACE_DOMAIN && identity.hostedDomain !== app.env.GOOGLE_WORKSPACE_DOMAIN) {
+    if (identity.hostedDomain !== app.env.GOOGLE_WORKSPACE_DOMAIN) {
       return reply.code(403).send({ error: 'domain_not_allowed' });
     }
 
@@ -74,11 +87,14 @@ export async function authRoutes(app: FastifyInstance) {
   // though not yet tracked in a revocation store — see design plan §8 for the
   // longer-term token-handling posture).
   app.post('/auth/refresh', async (request, reply) => {
-    const body = refreshBody.parse(request.body);
+    const parsed = refreshBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_request' });
+    }
 
     let decoded: { id: string };
     try {
-      decoded = verifyRefreshToken(body.refreshToken, app.env.JWT_REFRESH_SECRET);
+      decoded = verifyRefreshToken(parsed.data.refreshToken, app.env.JWT_REFRESH_SECRET);
     } catch {
       return reply.code(401).send({ error: 'invalid_refresh_token' });
     }

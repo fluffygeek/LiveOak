@@ -8,8 +8,15 @@ export const addressSchema = z.object({
   addressLine1: z.string().min(1),
   addressLine2: z.string().optional(),
   city: z.string().min(1),
-  state: z.string().length(2),
-  zip: z.string().min(5),
+  state: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/, 'Must be a 2-letter state code'),
+  zip: z
+    .string()
+    .trim()
+    .regex(/^\d{5}(-\d{4})?$/, 'Must be a 5-digit ZIP or ZIP+4'),
 });
 
 export const jobDraftInputSchema = z.object({
@@ -20,7 +27,10 @@ export const jobDraftInputSchema = z.object({
   isNewBuild: z.boolean().default(false),
   address: addressSchema,
 });
-export type JobDraftInput = z.infer<typeof jobDraftInputSchema>;
+/** What a caller may submit — isNewBuild is optional here since the schema defaults it. */
+export type JobDraftInput = z.input<typeof jobDraftInputSchema>;
+/** The parsed/validated shape — isNewBuild is always present after `.parse()`. */
+export type JobDraftOutput = z.output<typeof jobDraftInputSchema>;
 
 export const addressVerificationStatusSchema = z.enum(ADDRESS_VERIFICATION_STATUSES);
 export const jobStatusSchema = z.enum(JOB_STATUSES);

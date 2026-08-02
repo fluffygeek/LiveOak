@@ -48,7 +48,7 @@ export function requireActiveUser(request: FastifyRequest, reply: FastifyReply) 
  * minimal role set for a route (e.g. requireRole(['payroll_admin'])) and this
  * always also allows app_admin, so role logic is never duplicated per-route.
  */
-export function requireRole(allowed: UserRole[]) {
+export function requireRole(allowed: readonly UserRole[]) {
   const allowedWithSuperset = new Set<UserRole>([...allowed, 'app_admin']);
   return function roleGuard(request: FastifyRequest, reply: FastifyReply) {
     const role = request.currentUser?.role;

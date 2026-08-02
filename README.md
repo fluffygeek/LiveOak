@@ -12,11 +12,12 @@ Node.js/TypeScript API and PostgreSQL.
 - `apps/mobile` — Expo app for technicians (iOS/Android)
 - `packages/db` — Drizzle schema + hand-authored partitioned-table migration
 - `packages/shared-types` — roles, enums, and zod schemas shared across apps
-- `docs/phase-0-checklist.md` — external setup steps (Google OAuth, USPS API, infra) needed before Phase 1
+- [`docs/phase-0-checklist.md`](docs/phase-0-checklist.md) — external setup steps (Google OAuth, USPS API, infra) needed before Phase 1
 
-See the full architecture, data model, and phased build plan in the design
-plan (Mermaid diagrams for architecture, data model, mobile/web flows,
-nightly jobs, and a non-technical overview).
+The full architecture, data model, and phased build plan (with Mermaid
+diagrams for architecture, data model, mobile/web flows, nightly jobs, and a
+non-technical overview) was reviewed and approved separately from this repo;
+ask in the project channel if you need it re-shared.
 
 ## Getting started
 

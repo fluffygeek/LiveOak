@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyJwt from '@fastify/jwt';
+import { ZodError } from 'zod';
 import { createDb, type Db } from '@liveoak/db';
 import { loadEnv, type Env } from './env.js';
 import { authenticate } from './middleware/rbac.js';
@@ -30,6 +31,16 @@ export async function buildServer() {
 
   await app.register(fastifyJwt, { secret: env.JWT_ACCESS_SECRET });
   app.decorate('authenticate', authenticate);
+
+  // Routes that call schema.parse() directly (rather than safeParse) land
+  // here on bad input — map that to 400 instead of Fastify's default 500,
+  // since it's the caller's fault, not the server's.
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.code(400).send({ error: 'invalid_request', details: error.flatten() });
+    }
+    return reply.send(error);
+  });
 
   await app.register(healthRoutes);
   await app.register(authRoutes);
