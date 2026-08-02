@@ -44,23 +44,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // gets rejected and incorrectly signs the user out of a valid session.
   const refreshInFlight = useRef<Promise<string | null> | null>(null);
 
+  // Rejects on a transport failure (dropped connection, DNS) rather than
+  // returning null, so callers can distinguish "not authenticated" (null)
+  // from "couldn't reach the server" and avoid signing out a valid session
+  // over a transient network blip.
   const refreshAccessToken = useCallback((): Promise<string | null> => {
     if (refreshInFlight.current) return refreshInFlight.current;
 
     refreshInFlight.current = (async () => {
-      try {
-        const res = await fetch('/api/auth/refresh', { method: 'POST' });
-        if (!res.ok) {
-          setAccessToken(null);
-          setUser(null);
-          return null;
-        }
-        const { accessToken: token } = await res.json();
-        setAccessToken(token);
-        return token as string;
-      } catch {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (!res.ok) {
+        setAccessToken(null);
+        setUser(null);
         return null;
       }
+      const { accessToken: token } = await res.json();
+      setAccessToken(token);
+      return token as string;
     })();
 
     return refreshInFlight.current.finally(() => {
@@ -73,11 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const token = await refreshAccessToken();
         if (token) setUser(await fetchMe(token));
+      } catch {
+        // Transport failure on initial load: treat as signed-out for this
+        // render; the user can retry by reloading or signing in again.
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [refreshAccessToken]);
 
   const signInWithIdToken = useCallback(async (idToken: string) => {
     const res = await fetch('/api/auth/session', {

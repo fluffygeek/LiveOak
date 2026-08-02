@@ -27,6 +27,8 @@ const EMPTY_FILTERS: Filters = {
   submittedTo: '',
 };
 
+const PER_PAGE = 25;
+
 /**
  * Payroll admin records dashboard: filterable/paginated list of submitted
  * jobs. See design plan §5 (admin web flow).
@@ -38,6 +40,7 @@ export default function RecordsPage() {
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [total, setTotal] = useState(0);
   const [workCodes, setWorkCodes] = useState<WorkCode[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -58,14 +61,17 @@ export default function RecordsPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ page: String(page), perPage: '25' });
+      const params = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
       if (filters.state) params.set('state', filters.state.toUpperCase());
       if (filters.status) params.set('status', filters.status);
       if (filters.workCodeId) params.set('workCodeId', filters.workCodeId);
       if (filters.isDiscrepancy) params.set('isDiscrepancy', 'true');
       if (filters.isDuplicate) params.set('isDuplicate', 'true');
       if (filters.submittedFrom) params.set('submittedFrom', filters.submittedFrom);
-      if (filters.submittedTo) params.set('submittedTo', filters.submittedTo);
+      if (filters.submittedTo) {
+        // The API compares against a timestamp; extend to the end of the selected day so it's inclusive.
+        params.set('submittedTo', `${filters.submittedTo}T23:59:59.999Z`);
+      }
 
       const res = await apiFetch(`/jobs?${params.toString()}`);
       if (!res.ok) {
@@ -74,6 +80,7 @@ export default function RecordsPage() {
       }
       const body = await res.json();
       setJobs(body.jobs);
+      setTotal(body.total ?? 0);
     } catch {
       setError('Could not load records. Check your connection.');
     } finally {
@@ -98,7 +105,6 @@ export default function RecordsPage() {
         onSubmit={(e) => {
           e.preventDefault();
           setPage(1);
-          load();
         }}
         style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
       >
@@ -207,7 +213,7 @@ export default function RecordsPage() {
           Previous
         </button>
         <span>Page {page}</span>
-        <button disabled={jobs.length < 25} onClick={() => setPage((p) => p + 1)}>
+        <button disabled={page * PER_PAGE >= total} onClick={() => setPage((p) => p + 1)}>
           Next
         </button>
       </div>

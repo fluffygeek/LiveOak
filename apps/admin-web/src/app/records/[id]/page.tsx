@@ -100,7 +100,6 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
           addressLine1,
           addressLine2: addressLine2 || null,
           city,
-          state,
           zip,
         }),
       });
@@ -111,6 +110,8 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       setJob(await res.json());
       setNotice('Saved.');
       await loadAuditLog();
+    } catch {
+      setError('Could not save changes. Check your connection.');
     } finally {
       setSaving(false);
     }
@@ -118,17 +119,21 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
 
   async function handleSetStatus(status: 'closed' | 'pictures_downloaded' | 'submitted') {
     setError(null);
-    const res = await apiFetch(`/jobs/${params.id}/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) {
-      setError('Could not update status.');
-      return;
+    try {
+      const res = await apiFetch(`/jobs/${params.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        setError('Could not update status.');
+        return;
+      }
+      setJob(await res.json());
+      await loadAuditLog();
+    } catch {
+      setError('Could not update status. Check your connection.');
     }
-    setJob(await res.json());
-    await loadAuditLog();
   }
 
   async function handleFlagDiscrepancy() {
@@ -137,28 +142,39 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       return;
     }
     setError(null);
-    const res = await apiFetch(`/jobs/${params.id}/discrepancy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ discrepancyReasonId: selectedReasonId, discrepancyNotes: discrepancyNotes || undefined }),
-    });
-    if (!res.ok) {
-      setError('Could not flag discrepancy.');
-      return;
+    try {
+      const res = await apiFetch(`/jobs/${params.id}/discrepancy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discrepancyReasonId: selectedReasonId,
+          discrepancyNotes: discrepancyNotes || undefined,
+        }),
+      });
+      if (!res.ok) {
+        setError('Could not flag discrepancy.');
+        return;
+      }
+      setJob(await res.json());
+      await loadAuditLog();
+    } catch {
+      setError('Could not flag discrepancy. Check your connection.');
     }
-    setJob(await res.json());
-    await loadAuditLog();
   }
 
   async function handleClearDiscrepancy() {
     setError(null);
-    const res = await apiFetch(`/jobs/${params.id}/discrepancy`, { method: 'DELETE' });
-    if (!res.ok) {
-      setError('Could not clear discrepancy.');
-      return;
+    try {
+      const res = await apiFetch(`/jobs/${params.id}/discrepancy`, { method: 'DELETE' });
+      if (!res.ok) {
+        setError('Could not clear discrepancy.');
+        return;
+      }
+      setJob(await res.json());
+      await loadAuditLog();
+    } catch {
+      setError('Could not clear discrepancy. Check your connection.');
     }
-    setJob(await res.json());
-    await loadAuditLog();
   }
 
   if (authLoading || !user) return <p>Loading…</p>;
@@ -209,7 +225,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
           <input value={city} onChange={(e) => setCity(e.target.value)} />
 
           <label>State</label>
-          <input value={state} maxLength={2} onChange={(e) => setState(e.target.value)} />
+          <span title="State is the record's partition key and cannot be changed here.">{state}</span>
 
           <label>ZIP</label>
           <input value={zip} onChange={(e) => setZip(e.target.value)} />
@@ -271,8 +287,18 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {job.photos.map((photo) =>
             photo.downloadUrl ? (
-              <a key={photo.id} href={photo.downloadUrl} target="_blank" rel="noreferrer">
-                <img src={photo.downloadUrl} alt="" style={{ width: 100, height: 100, objectFit: 'cover' }} />
+              <a
+                key={photo.id}
+                href={photo.downloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open full-size photo for job ${job.jobNumber}`}
+              >
+                <img
+                  src={photo.downloadUrl}
+                  alt={`Photo uploaded for job ${job.jobNumber}`}
+                  style={{ width: 100, height: 100, objectFit: 'cover' }}
+                />
               </a>
             ) : (
               <span key={photo.id}>{photo.s3Key}</span>

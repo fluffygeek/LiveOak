@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { and, desc, eq, gte, lte, SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, SQL } from 'drizzle-orm';
 import { jobs, jobPhotos, auditLog, users, discrepancyReasons } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
 import { createPhotoDownloadUrl } from '../lib/s3.js';
 import { recordFieldDiffs, recordAction } from '../lib/audit.js';
 
+// `state` is intentionally excluded: it is the jobs table's list-partition
+// key (part of the composite PK (id, state)) and must never be admin-editable.
 const EDITABLE_FIELDS = [
   'jobNumber',
   'workCodeId',
@@ -14,7 +16,6 @@ const EDITABLE_FIELDS = [
   'addressLine1',
   'addressLine2',
   'city',
-  'state',
   'zip',
   'isNewBuild',
 ] as const;
@@ -27,12 +28,6 @@ const jobPatchBody = z.object({
   addressLine1: z.string().min(1).optional(),
   addressLine2: z.string().nullable().optional(),
   city: z.string().min(1).optional(),
-  state: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z]{2}$/)
-    .optional(),
   zip: z
     .string()
     .trim()
@@ -41,13 +36,23 @@ const jobPatchBody = z.object({
   isNewBuild: z.boolean().optional(),
 });
 
+const optionalBoolString = z
+  .enum(['true', 'false'])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === 'true'));
+
 const listQuery = z.object({
-  state: z.string().length(2).optional(),
+  state: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .length(2)
+    .optional(),
   technicianId: z.string().uuid().optional(),
   workCodeId: z.string().uuid().optional(),
   status: z.enum(['submitted', 'closed', 'pictures_downloaded']).optional(),
-  isDiscrepancy: z.coerce.boolean().optional(),
-  isDuplicate: z.coerce.boolean().optional(),
+  isDiscrepancy: optionalBoolString,
+  isDuplicate: optionalBoolString,
   submittedFrom: z.coerce.date().optional(),
   submittedTo: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -86,15 +91,19 @@ export async function payrollJobRoutes(app: FastifyInstance) {
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const rows = await app.db
-      .select()
-      .from(jobs)
-      .where(where)
-      .orderBy(desc(jobs.submittedAt))
-      .limit(query.perPage)
-      .offset((query.page - 1) * query.perPage);
+    const [rows, totalRows] = await Promise.all([
+      app.db
+        .select()
+        .from(jobs)
+        .where(where)
+        .orderBy(desc(jobs.submittedAt))
+        .limit(query.perPage)
+        .offset((query.page - 1) * query.perPage),
+      app.db.select({ total: count() }).from(jobs).where(where),
+    ]);
+    const total = totalRows[0]?.total ?? 0;
 
-    return reply.send({ jobs: rows, page: query.page, perPage: query.perPage });
+    return reply.send({ jobs: rows, page: query.page, perPage: query.perPage, total });
   });
 
   app.get<{ Params: { id: string } }>('/jobs/:id', { preHandler: guards }, async (request, reply) => {
@@ -102,7 +111,10 @@ export async function payrollJobRoutes(app: FastifyInstance) {
     if (!job) {
       return reply.code(404).send({ error: 'job_not_found' });
     }
-    const photos = await app.db.select().from(jobPhotos).where(eq(jobPhotos.jobId, job.id));
+    const photos = await app.db
+      .select()
+      .from(jobPhotos)
+      .where(and(eq(jobPhotos.jobId, job.id), eq(jobPhotos.jobState, job.state)));
     const photosWithUrls = await Promise.all(
       photos.map(async (photo) => ({
         ...photo,
@@ -118,18 +130,20 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'no_fields_to_update' });
     }
 
-    const [existing] = await app.db.select().from(jobs).where(eq(jobs.id, request.params.id));
-    if (!existing) {
-      return reply.code(404).send({ error: 'job_not_found' });
-    }
-
     const updates: Record<string, unknown> = { ...body, updatedAt: new Date() };
     if (body.footage !== undefined) {
       updates.footage = String(body.footage);
     }
 
     const updated = await app.db.transaction(async (tx) => {
-      const [row] = await tx.update(jobs).set(updates).where(eq(jobs.id, existing.id)).returning();
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      if (!existing) return null;
+
+      const [row] = await tx
+        .update(jobs)
+        .set(updates)
+        .where(and(eq(jobs.id, existing.id), eq(jobs.state, existing.state)))
+        .returning();
       if (!row) throw new Error('Failed to update job record');
 
       await recordFieldDiffs(tx, {
@@ -144,21 +158,23 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       return row;
     });
 
+    if (!updated) {
+      return reply.code(404).send({ error: 'job_not_found' });
+    }
     return reply.send(updated);
   });
 
   app.post<{ Params: { id: string } }>('/jobs/:id/status', { preHandler: guards }, async (request, reply) => {
     const body = statusBody.parse(request.body);
-    const [existing] = await app.db.select().from(jobs).where(eq(jobs.id, request.params.id));
-    if (!existing) {
-      return reply.code(404).send({ error: 'job_not_found' });
-    }
 
     const updated = await app.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      if (!existing) return null;
+
       const [row] = await tx
         .update(jobs)
         .set({ status: body.status, updatedAt: new Date() })
-        .where(eq(jobs.id, existing.id))
+        .where(and(eq(jobs.id, existing.id), eq(jobs.state, existing.state)))
         .returning();
       if (!row) throw new Error('Failed to update job status');
 
@@ -175,15 +191,14 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       return row;
     });
 
+    if (!updated) {
+      return reply.code(404).send({ error: 'job_not_found' });
+    }
     return reply.send(updated);
   });
 
   app.post<{ Params: { id: string } }>('/jobs/:id/discrepancy', { preHandler: guards }, async (request, reply) => {
     const body = discrepancyBody.parse(request.body);
-    const [existing] = await app.db.select().from(jobs).where(eq(jobs.id, request.params.id));
-    if (!existing) {
-      return reply.code(404).send({ error: 'job_not_found' });
-    }
     const [reason] = await app.db
       .select()
       .from(discrepancyReasons)
@@ -193,15 +208,18 @@ export async function payrollJobRoutes(app: FastifyInstance) {
     }
 
     const updated = await app.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      if (!existing) return null;
+
       const [row] = await tx
         .update(jobs)
         .set({
           isDiscrepancy: true,
           discrepancyReasonId: body.discrepancyReasonId,
-          discrepancyNotes: body.discrepancyNotes,
+          discrepancyNotes: body.discrepancyNotes ?? null,
           updatedAt: new Date(),
         })
-        .where(eq(jobs.id, existing.id))
+        .where(and(eq(jobs.id, existing.id), eq(jobs.state, existing.state)))
         .returning();
       if (!row) throw new Error('Failed to flag discrepancy');
 
@@ -218,20 +236,21 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       return row;
     });
 
+    if (!updated) {
+      return reply.code(404).send({ error: 'job_not_found' });
+    }
     return reply.send(updated);
   });
 
   app.delete<{ Params: { id: string } }>('/jobs/:id/discrepancy', { preHandler: guards }, async (request, reply) => {
-    const [existing] = await app.db.select().from(jobs).where(eq(jobs.id, request.params.id));
-    if (!existing) {
-      return reply.code(404).send({ error: 'job_not_found' });
-    }
-
     const updated = await app.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      if (!existing) return null;
+
       const [row] = await tx
         .update(jobs)
         .set({ isDiscrepancy: false, discrepancyReasonId: null, discrepancyNotes: null, updatedAt: new Date() })
-        .where(eq(jobs.id, existing.id))
+        .where(and(eq(jobs.id, existing.id), eq(jobs.state, existing.state)))
         .returning();
       if (!row) throw new Error('Failed to clear discrepancy');
 
@@ -248,6 +267,9 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       return row;
     });
 
+    if (!updated) {
+      return reply.code(404).send({ error: 'job_not_found' });
+    }
     return reply.send(updated);
   });
 
