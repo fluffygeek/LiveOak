@@ -98,7 +98,7 @@ export default function RecordsPage() {
     <main>
       <h1>Records</h1>
       <p>
-        <Link href="/">← Home</Link>
+        <Link href="/">← Home</Link> · <Link href="/duplicates">Duplicate Review Queue</Link>
       </p>
 
       <form

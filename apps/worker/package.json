@@ -13,6 +13,7 @@
     "@liveoak/db": "workspace:*",
     "@liveoak/shared-types": "workspace:*",
     "bullmq": "^5.16.0",
+    "drizzle-orm": "^0.33.0",
     "ioredis": "^5.4.1",
     "luxon": "^3.5.0",
     "tsx": "^4.16.5"

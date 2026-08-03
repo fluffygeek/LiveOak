@@ -73,6 +73,11 @@ export interface DiscrepancyReason {
   sortOrder: number;
 }
 
+export interface DuplicateGroup {
+  duplicateGroupId: string;
+  jobs: Job[];
+}
+
 export interface UserRow {
   id: string;
   email: string;
