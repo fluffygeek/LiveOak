@@ -85,3 +85,16 @@ export interface UserRow {
   displayName: string | null;
   active: boolean;
 }
+
+export interface DistributionListEntry {
+  id: string;
+  email: string;
+  label: string | null;
+  active: boolean;
+}
+
+export interface AppConfigEntry {
+  key: string;
+  value: unknown;
+  updatedAt: string;
+}

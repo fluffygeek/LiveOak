@@ -32,6 +32,11 @@ export default function HomePage() {
           <Link href="/records">View Records →</Link>
         </p>
       )}
+      {user.role === 'app_admin' && (
+        <p>
+          <Link href="/admin">Application Administration →</Link>
+        </p>
+      )}
       <button onClick={() => void signOut()}>Sign out</button>
     </main>
   );

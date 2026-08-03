@@ -1,8 +1,11 @@
-import type { Env } from '../env.js';
-
 const USPS_OAUTH_URL = 'https://apis.usps.com/oauth2/v3/token';
 const USPS_ADDRESS_URL = 'https://apis.usps.com/addresses/v3/address';
 const REQUEST_TIMEOUT_MS = 5000;
+
+export interface UspsCredentials {
+  USPS_CLIENT_ID?: string;
+  USPS_CLIENT_SECRET?: string;
+}
 
 export interface AddressInput {
   addressLine1: string;
@@ -29,7 +32,7 @@ export interface UspsVerificationResult {
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-async function getAccessToken(env: Env): Promise<string> {
+async function getAccessToken(env: UspsCredentials): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) {
     return cachedToken.token;
   }
@@ -58,12 +61,14 @@ async function getAccessToken(env: Env): Promise<string> {
 /**
  * Verifies/standardizes a US address against USPS APIs v3. Always degrades
  * gracefully rather than throwing: missing credentials, timeouts, and
- * transport errors all resolve to `unavailable` so a technician can still
- * submit (flagged for payroll admin follow-up) per design plan §7. A USPS
- * "no match" response resolves to `failed`, which the caller should surface
- * to the technician for correction.
+ * transport errors all resolve to `unavailable` so a caller can proceed
+ * without USPS confirmation (flagged for follow-up) per design plan §7. A
+ * USPS "no match" response resolves to `failed`, which the caller should
+ * surface for correction. Shared between apps/api (submit-time
+ * verification) and apps/worker (the retry job for records stuck
+ * `unavailable`).
  */
-export async function verifyAddressWithUsps(env: Env, address: AddressInput): Promise<UspsVerificationResult> {
+export async function verifyAddressWithUsps(env: UspsCredentials, address: AddressInput): Promise<UspsVerificationResult> {
   if (!env.USPS_CLIENT_ID || !env.USPS_CLIENT_SECRET) {
     return { status: 'unavailable' };
   }
@@ -101,7 +106,7 @@ export async function verifyAddressWithUsps(env: Env, address: AddressInput): Pr
     if (res.status === 400) {
       // Ambiguous: USPS returns 400 for both malformed requests and some
       // unmatchable addresses. Log it for diagnosis but don't tell the
-      // technician their (possibly valid) address is wrong — degrade to
+      // caller their (possibly valid) address is wrong — degrade to
       // unavailable instead.
       console.error('USPS address request returned 400:', await res.text().catch(() => '<unreadable body>'));
       return { status: 'unavailable' };

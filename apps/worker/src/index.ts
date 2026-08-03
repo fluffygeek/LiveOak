@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { createDb } from '@liveoak/db';
+import { loadEnv } from './env.js';
 import { createQueueRedisConnection, createWorkerRedisConnection } from './redis.js';
 import { reconcileDuplicates } from './jobs/reconcileDuplicates.js';
 import { sendDiscrepancyDigest } from './jobs/discrepancyDigest.js';
@@ -13,9 +14,10 @@ const QUEUE_NAME = 'liveoak-nightly';
 const JOB_RETENTION = { removeOnComplete: 1000, removeOnFail: 5000 };
 
 async function main() {
+  const env = loadEnv();
   const queueConnection = createQueueRedisConnection();
   const workerConnection = createWorkerRedisConnection();
-  const db = createDb();
+  const db = createDb(env.DATABASE_URL);
   const queue = new Queue(QUEUE_NAME, { connection: queueConnection });
   queue.on('error', (err) => console.error('Queue error:', err));
 
@@ -45,9 +47,9 @@ async function main() {
         case 'reconcile-duplicates':
           return reconcileDuplicates(db, job);
         case 'discrepancy-digest':
-          return sendDiscrepancyDigest(db, job);
+          return sendDiscrepancyDigest(db, env, job);
         case 'usps-retry':
-          return retryUspsVerification(db, job);
+          return retryUspsVerification(db, env, job);
         default:
           throw new Error(`Unknown job name: ${job.name}`);
       }

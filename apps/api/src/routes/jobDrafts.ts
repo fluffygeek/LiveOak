@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { jobDrafts, jobDraftPhotos, jobs, jobPhotos, workCodes, auditLog } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
 import { createPhotoUploadUrl, isAllowedPhotoContentType, objectExists } from '../lib/s3.js';
-import { verifyAddressWithUsps } from '../lib/usps.js';
+import { verifyAddressWithUsps } from '@liveoak/usps';
 
 const UNIQUE_VIOLATION = '23505';
 
