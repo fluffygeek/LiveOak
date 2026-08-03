@@ -39,3 +39,24 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, worker]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Deploy-pipeline check: catches a Dockerfile that references a
+      # workspace package/file the build context doesn't actually contain
+      # (e.g. a Dockerfile edit that no longer matches the pnpm workspace
+      # layout) before it reaches Railway.
+      - name: Build apps/${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: false

@@ -27,6 +27,8 @@ const envSchema = z.object({
   // Set for S3-compatible providers (Cloudflare R2, MinIO); leave unset for real AWS S3.
   S3_ENDPOINT: z.string().optional(),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  // Optional: error monitoring is a no-op without this configured.
+  SENTRY_DSN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
