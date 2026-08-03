@@ -10,8 +10,10 @@ const envSchema = z.object({
   // the run) when Postmark isn't configured yet — see sendDiscrepancyDigest.
   POSTMARK_SERVER_TOKEN: z.string().optional(),
   DIGEST_EMAIL_FROM: z.string().optional(),
-  // Optional: error monitoring is a no-op without this configured.
-  SENTRY_DSN: z.string().optional(),
+  // Optional: error monitoring is a no-op without this configured. Blank
+  // values are normalized to undefined so an empty env var behaves the same
+  // as an unset one, rather than being handed to Sentry.init() as "".
+  SENTRY_DSN: z.preprocess((val) => (val === '' ? undefined : val), z.string().url().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

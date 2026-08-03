@@ -2,7 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { createDb } from '@liveoak/db';
 import { loadEnv } from './env.js';
 import { logger } from './lib/logger.js';
-import { initSentry, captureException } from './lib/sentry.js';
+import { initSentry, captureException, flushSentry } from './lib/sentry.js';
 import { createQueueRedisConnection, createWorkerRedisConnection } from './redis.js';
 import { reconcileDuplicates } from './jobs/reconcileDuplicates.js';
 import { sendDiscrepancyDigest } from './jobs/discrepancyDigest.js';
@@ -22,7 +22,10 @@ async function main() {
   const workerConnection = createWorkerRedisConnection();
   const db = createDb(env.DATABASE_URL);
   const queue = new Queue(QUEUE_NAME, { connection: queueConnection });
-  queue.on('error', (err) => logger.error({ err }, 'Queue error'));
+  queue.on('error', (err) => {
+    logger.error({ err }, 'Queue error');
+    captureException(err);
+  });
 
   // Repeatable schedulers. `upsertJobScheduler` is idempotent across
   // redeploys/multiple instances so restarts don't create duplicate
@@ -82,12 +85,14 @@ async function main() {
     } catch (err) {
       exitCode = 1;
       logger.error({ err }, 'Worker shutdown failed');
+      captureException(err);
     }
     try {
       await queue.close();
     } catch (err) {
       exitCode = 1;
       logger.error({ err }, 'Queue shutdown failed');
+      captureException(err);
     }
     workerConnection.disconnect();
     queueConnection.disconnect();
@@ -97,8 +102,9 @@ async function main() {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   logger.error({ err }, 'Fatal error during worker startup');
   captureException(err);
+  await flushSentry();
   process.exit(1);
 });

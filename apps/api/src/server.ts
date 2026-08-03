@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { createDb, type Db } from '@liveoak/db';
 import { loadEnv, type Env } from './env.js';
-import { initSentry, captureException } from './lib/sentry.js';
+import { initSentry, captureException, flushSentry } from './lib/sentry.js';
 import { authenticate } from './middleware/rbac.js';
 import { createS3Client } from './lib/s3.js';
 import { authRoutes } from './routes/auth.js';
@@ -86,8 +86,9 @@ async function main() {
   await app.listen({ port: app.env.PORT ?? app.env.API_PORT, host: '0.0.0.0' });
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
   captureException(err);
+  await flushSentry();
   process.exit(1);
 });

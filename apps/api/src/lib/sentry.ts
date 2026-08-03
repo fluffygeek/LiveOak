@@ -17,3 +17,18 @@ export function captureException(error: unknown): void {
   if (!enabled) return;
   Sentry.captureException(error);
 }
+
+/**
+ * Drains the pending event queue with a bounded wait, for use right before a
+ * fatal process.exit — without this, a captured startup error can be lost if
+ * the process exits before Sentry's transport has sent it. Never throws: a
+ * flush failure must not block the exit it's guarding.
+ */
+export async function flushSentry(timeoutMs = 2000): Promise<void> {
+  if (!enabled) return;
+  try {
+    await Sentry.flush(timeoutMs);
+  } catch {
+    // best-effort only
+  }
+}

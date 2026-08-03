@@ -113,11 +113,13 @@ deployment target's log aggregator.
 `pnpm db:migrate`, run `pnpm db:seed-admin` with the appropriate env vars —
 see `packages/db/src/seed-admin.ts`.
 
-**Rotate JWT secrets**: `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are
-independent. Rotating either signs out every session immediately (access
-tokens fail verification; refresh tokens fail verification on next use) —
-there's no dual-secret grace period. Rotate during a maintenance window if
-that matters to your users.
+**Rotate JWT secrets**: `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` rotate
+independently, and each only invalidates its own token type. Rotating
+`JWT_ACCESS_SECRET` invalidates access tokens only — existing refresh tokens
+remain valid and will mint new (validly-signed) access tokens on next use.
+Rotating `JWT_REFRESH_SECRET` invalidates refresh tokens only — existing
+access tokens remain valid until they expire on their own short TTL. To
+revoke both token types at once, rotate both secrets in the same deployment.
 
 **Investigate a stuck discrepancy digest**: check
 `apps/worker`'s logs for `sendDiscrepancyDigest` — it logs and returns early
@@ -134,5 +136,21 @@ records automatically; no backfill script is needed.
 
 **Recompute duplicate groups on demand**: there's no manual-trigger API
 route for `reconcileDuplicates` (it's schedule-only, `0 3 * * *`
-America/New_York) — trigger it early by enqueueing the job directly against
-Redis, or just wait for the next scheduled run.
+America/New_York, job name `reconcile-duplicates` on the `liveoak-nightly`
+queue, no payload). To run it early, enqueue a one-off job directly against
+Redis with `REDIS_URL` set in the environment:
+
+```bash
+node -e "
+const { Queue } = require('bullmq');
+const q = new Queue('liveoak-nightly', { connection: { url: process.env.REDIS_URL } });
+q.add('reconcile-duplicates', {}).then(() => q.close());
+"
+```
+
+The job runs in a single DB transaction: existing `duplicate_group_id`s are
+preserved where a group's membership is unchanged, `duplicate_links` rows for
+any group that gets merged away are deleted (not left orphaned), and affected
+jobs' `updated_at` is bumped. Avoid running this manually at the same time the
+3am scheduled run is in flight — both would recompute against the same rows
+and race on which group ID wins.
