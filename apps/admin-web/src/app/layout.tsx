@@ -1,4 +1,6 @@
+import './globals.css';
 import { AuthProvider } from '../lib/auth-context';
+import { AppShell } from '../components/AppShell';
 
 export const metadata = {
   title: 'LiveOak Admin',
@@ -9,7 +11,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

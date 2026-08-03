@@ -92,13 +92,13 @@ export default function RecordsPage() {
     load();
   }, [load]);
 
-  if (authLoading || !user) return <p>Loading…</p>;
+  if (authLoading || !user) return <p className="muted">Loading…</p>;
 
   return (
     <main>
       <h1>Records</h1>
-      <p>
-        <Link href="/">← Home</Link> · <Link href="/duplicates">Duplicate Review Queue</Link>
+      <p className="breadcrumb">
+        <Link href="/duplicates">Duplicate Review Queue →</Link>
       </p>
 
       <form
@@ -106,35 +106,66 @@ export default function RecordsPage() {
           e.preventDefault();
           setPage(1);
         }}
-        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+        className="card field-row"
       >
-        <input
-          placeholder="State (e.g. TX)"
-          maxLength={2}
-          value={filters.state}
-          onChange={(e) => setFilters((f) => ({ ...f, state: e.target.value }))}
-        />
-        <select
-          value={filters.status}
-          onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as JobStatus | '' }))}
-        >
-          <option value="">Any status</option>
-          <option value="submitted">Submitted</option>
-          <option value="closed">Closed</option>
-          <option value="pictures_downloaded">Pictures Downloaded</option>
-        </select>
-        <select
-          value={filters.workCodeId}
-          onChange={(e) => setFilters((f) => ({ ...f, workCodeId: e.target.value }))}
-        >
-          <option value="">Any work code</option>
-          {workCodes.map((wc) => (
-            <option key={wc.id} value={wc.id}>
-              {wc.code}
-            </option>
-          ))}
-        </select>
-        <label>
+        <div className="field">
+          <label htmlFor="filter-state">State</label>
+          <input
+            id="filter-state"
+            placeholder="e.g. TX"
+            maxLength={2}
+            style={{ width: 70 }}
+            value={filters.state}
+            onChange={(e) => setFilters((f) => ({ ...f, state: e.target.value }))}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="filter-status">Status</label>
+          <select
+            id="filter-status"
+            value={filters.status}
+            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as JobStatus | '' }))}
+          >
+            <option value="">Any status</option>
+            <option value="submitted">Submitted</option>
+            <option value="closed">Closed</option>
+            <option value="pictures_downloaded">Pictures Downloaded</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="filter-work-code">Work code</label>
+          <select
+            id="filter-work-code"
+            value={filters.workCodeId}
+            onChange={(e) => setFilters((f) => ({ ...f, workCodeId: e.target.value }))}
+          >
+            <option value="">Any work code</option>
+            {workCodes.map((wc) => (
+              <option key={wc.id} value={wc.id}>
+                {wc.code}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="filter-from">Submitted from</label>
+          <input
+            id="filter-from"
+            type="date"
+            value={filters.submittedFrom}
+            onChange={(e) => setFilters((f) => ({ ...f, submittedFrom: e.target.value }))}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="filter-to">Submitted to</label>
+          <input
+            id="filter-to"
+            type="date"
+            value={filters.submittedTo}
+            onChange={(e) => setFilters((f) => ({ ...f, submittedTo: e.target.value }))}
+          />
+        </div>
+        <label className="checkbox">
           <input
             type="checkbox"
             checked={filters.isDiscrepancy}
@@ -142,7 +173,7 @@ export default function RecordsPage() {
           />
           Discrepancy only
         </label>
-        <label>
+        <label className="checkbox">
           <input
             type="checkbox"
             checked={filters.isDuplicate}
@@ -150,19 +181,10 @@ export default function RecordsPage() {
           />
           Duplicates only
         </label>
-        <input
-          type="date"
-          value={filters.submittedFrom}
-          onChange={(e) => setFilters((f) => ({ ...f, submittedFrom: e.target.value }))}
-        />
-        <input
-          type="date"
-          value={filters.submittedTo}
-          onChange={(e) => setFilters((f) => ({ ...f, submittedTo: e.target.value }))}
-        />
         <button type="submit">Filter</button>
         <button
           type="button"
+          className="btn-secondary"
           onClick={() => {
             setFilters(EMPTY_FILTERS);
             setPage(1);
@@ -172,48 +194,59 @@ export default function RecordsPage() {
         </button>
       </form>
 
-      {loading && <p>Loading records…</p>}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {loading && <p className="muted">Loading records…</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      {!loading && !error && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th align="left">Job #</th>
-              <th align="left">State</th>
-              <th align="left">Address</th>
-              <th align="left">Status</th>
-              <th align="left">Discrepancy</th>
-              <th align="left">Duplicate</th>
-              <th align="left">Submitted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((job) => (
-              <tr key={job.id} style={{ borderTop: '1px solid #eee' }}>
-                <td>
-                  <Link href={`/records/${job.id}`}>{job.jobNumber}</Link>
-                </td>
-                <td>{job.state}</td>
-                <td>
-                  {job.addressLine1}, {job.city} {job.zip}
-                </td>
-                <td>{job.status}</td>
-                <td>{job.isDiscrepancy ? '⚠️' : ''}</td>
-                <td>{job.isDuplicate ? '🔁' : ''}</td>
-                <td>{new Date(job.submittedAt).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {!loading && !error && jobs.length === 0 && (
+        <p className="empty-state">No records match these filters.</p>
       )}
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-        <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+      {!loading && !error && jobs.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Job #</th>
+                <th>State</th>
+                <th>Address</th>
+                <th>Status</th>
+                <th>Flags</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id}>
+                  <td>
+                    <Link href={`/records/${job.id}`}>{job.jobNumber}</Link>
+                  </td>
+                  <td>{job.state}</td>
+                  <td>
+                    {job.addressLine1}, {job.city} {job.zip}
+                  </td>
+                  <td>{job.status}</td>
+                  <td>
+                    {job.isDiscrepancy && <span className="badge badge-warning">Discrepancy</span>}{' '}
+                    {job.isDuplicate && <span className="badge badge-info">Duplicate</span>}
+                  </td>
+                  <td>{new Date(job.submittedAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
           Previous
         </button>
-        <span>Page {page}</span>
-        <button disabled={page * PER_PAGE >= total} onClick={() => setPage((p) => p + 1)}>
+        <span className="muted">Page {page}</span>
+        <button
+          className="btn-secondary"
+          disabled={page * PER_PAGE >= total}
+          onClick={() => setPage((p) => p + 1)}
+        >
           Next
         </button>
       </div>

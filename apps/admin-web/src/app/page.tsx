@@ -1,21 +1,20 @@
 'use client';
 
-import Link from 'next/link';
 import { useAuth } from '../lib/auth-context';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 
 export default function HomePage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
-    return <p>Loading…</p>;
+    return <p className="muted">Loading…</p>;
   }
 
   if (!user) {
     return (
-      <main>
+      <main className="card" style={{ maxWidth: 360, margin: '10vh auto 0' }}>
         <h1>LiveOak Admin</h1>
-        <p>Sign in with your company Google account.</p>
+        <p className="muted">Sign in with your company Google account.</p>
         <GoogleSignInButton />
       </main>
     );
@@ -23,21 +22,11 @@ export default function HomePage() {
 
   return (
     <main>
-      <h1>LiveOak Admin</h1>
-      <p>
-        Signed in as {user.email} ({user.role})
+      <h1>Welcome back</h1>
+      <p className="muted">
+        Signed in as {user.email} · <span className="role-badge">{user.role.replace('_', ' ')}</span>
       </p>
-      {(user.role === 'payroll_admin' || user.role === 'app_admin') && (
-        <p>
-          <Link href="/records">View Records →</Link>
-        </p>
-      )}
-      {user.role === 'app_admin' && (
-        <p>
-          <Link href="/admin">Application Administration →</Link>
-        </p>
-      )}
-      <button onClick={() => void signOut()}>Sign out</button>
+      <p>Use the navigation above to get to Records, Duplicates, or Admin.</p>
     </main>
   );
 }
