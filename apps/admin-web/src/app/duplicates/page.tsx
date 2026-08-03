@@ -68,56 +68,61 @@ export default function DuplicatesPage() {
     }
   }
 
-  if (authLoading || !user) return <p>Loading…</p>;
+  if (authLoading || !user) return <p className="muted">Loading…</p>;
 
   return (
     <main>
       <h1>Duplicate Review Queue</h1>
-      <p>
+      <p className="breadcrumb">
         <Link href="/records">← Records</Link>
       </p>
 
-      {loading && <p>Loading…</p>}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {loading && <p className="muted">Loading…</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      {!loading && !error && groups.length === 0 && <p>No duplicate groups flagged.</p>}
+      {!loading && !error && groups.length === 0 && <p className="empty-state">No duplicate groups flagged.</p>}
 
       {groups.map((group) => (
-        <section key={group.duplicateGroupId} style={{ marginBottom: 24, border: '1px solid #ddd', padding: 12 }}>
-          <h2>Group {group.duplicateGroupId.slice(0, 8)}</h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th align="left">Job #</th>
-                <th align="left">Address</th>
-                <th align="left">Status</th>
-                <th align="left">Submitted</th>
-                <th align="left"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.jobs.map((job) => (
-                <tr key={job.id} style={{ borderTop: '1px solid #eee' }}>
-                  <td>
-                    <Link href={`/records/${job.id}`}>{job.jobNumber}</Link>
-                  </td>
-                  <td>
-                    {job.addressLine1}, {job.city} {job.state} {job.zip}
-                  </td>
-                  <td>{job.status}</td>
-                  <td>{new Date(job.submittedAt).toLocaleDateString()}</td>
-                  <td>
-                    <button
-                      onClick={() => handleUnlink(group.duplicateGroupId, job.id)}
-                      disabled={resolvingGroupId === group.duplicateGroupId}
-                    >
-                      Not a duplicate
-                    </button>
-                  </td>
+        <section key={group.duplicateGroupId} className="card">
+          <h2>
+            Group <span className="muted">{group.duplicateGroupId.slice(0, 8)}</span>
+          </h2>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job #</th>
+                  <th>Address</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {group.jobs.map((job) => (
+                  <tr key={job.id}>
+                    <td>
+                      <Link href={`/records/${job.id}`}>{job.jobNumber}</Link>
+                    </td>
+                    <td>
+                      {job.addressLine1}, {job.city} {job.state} {job.zip}
+                    </td>
+                    <td>{job.status}</td>
+                    <td>{new Date(job.submittedAt).toLocaleDateString()}</td>
+                    <td>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => handleUnlink(group.duplicateGroupId, job.id)}
+                        disabled={resolvingGroupId === group.duplicateGroupId}
+                      >
+                        Not a duplicate
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ))}
     </main>

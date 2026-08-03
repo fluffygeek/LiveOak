@@ -102,18 +102,18 @@ export default function WorkCodesPage() {
     }
   }
 
-  if (authLoading || !user || user.role !== 'app_admin') return <p>Loading…</p>;
+  if (authLoading || !user || user.role !== 'app_admin') return <p className="muted">Loading…</p>;
 
   return (
     <main>
       <h1>Work Codes</h1>
-      <p>
+      <p className="breadcrumb">
         <Link href="/admin">← Admin</Link>
       </p>
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+      <form onSubmit={handleCreate} className="card field-row">
         <input aria-label="Code" placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
         <input
           aria-label="Description"
@@ -137,34 +137,46 @@ export default function WorkCodesPage() {
       </form>
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="muted">Loading…</p>
+      ) : error ? null : items.length === 0 ? (
+        <p className="empty-state">No work codes yet.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th align="left">Code</th>
-              <th align="left">Description</th>
-              <th align="left">Required Photos</th>
-              <th align="left">Active</th>
-              <th align="left"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} style={{ borderTop: '1px solid #eee' }}>
-                <td>{item.code}</td>
-                <td>{item.description ?? '—'}</td>
-                <td>{item.requiredPhotoCount}</td>
-                <td>{item.active ? 'Yes' : 'No'}</td>
-                <td>
-                  <button onClick={() => handleToggleActive(item)} disabled={pendingId === item.id}>
-                    {item.active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Description</th>
+                <th>Required Photos</th>
+                <th>Active</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.code}</td>
+                  <td>{item.description ?? '—'}</td>
+                  <td>{item.requiredPhotoCount}</td>
+                  <td>
+                    <span className={`badge ${item.active ? 'badge-success' : 'badge-neutral'}`}>
+                      {item.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleToggleActive(item)}
+                      disabled={pendingId === item.id}
+                    >
+                      {item.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   );

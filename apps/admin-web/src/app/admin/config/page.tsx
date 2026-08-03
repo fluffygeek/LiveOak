@@ -88,52 +88,58 @@ export default function AppConfigPage() {
     }
   }
 
-  if (authLoading || !user || user.role !== 'app_admin') return <p>Loading…</p>;
+  if (authLoading || !user || user.role !== 'app_admin') return <p className="muted">Loading…</p>;
 
   return (
     <main>
       <h1>App Config</h1>
-      <p>
+      <p className="breadcrumb">
         <Link href="/admin">← Admin</Link>
       </p>
-      <p>Values are raw JSON (e.g. booleans as <code>true</code>/<code>false</code>, numbers unquoted, strings quoted).</p>
+      <p className="muted">
+        Values are raw JSON (e.g. booleans as <code>true</code>/<code>false</code>, numbers unquoted, strings quoted).
+      </p>
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="muted">Loading…</p>
+      ) : error ? null : items.length === 0 ? (
+        <p className="empty-state">No config entries yet.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th align="left">Key</th>
-              <th align="left">Value</th>
-              <th align="left">Updated</th>
-              <th align="left"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.key} style={{ borderTop: '1px solid #eee' }}>
-                <td>{item.key}</td>
-                <td>
-                  <input
-                    aria-label={`Value for ${item.key}`}
-                    value={drafts[item.key] ?? ''}
-                    onChange={(e) => setDrafts((d) => ({ ...d, [item.key]: e.target.value }))}
-                    style={{ width: 200 }}
-                  />
-                </td>
-                <td>{new Date(item.updatedAt).toLocaleString()}</td>
-                <td>
-                  <button onClick={() => handleSave(item.key)} disabled={savingKey === item.key}>
-                    Save
-                  </button>
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+                <th>Updated</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.key}>
+                  <td>{item.key}</td>
+                  <td>
+                    <input
+                      aria-label={`Value for ${item.key}`}
+                      value={drafts[item.key] ?? ''}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [item.key]: e.target.value }))}
+                      style={{ width: 200 }}
+                    />
+                  </td>
+                  <td>{new Date(item.updatedAt).toLocaleString()}</td>
+                  <td>
+                    <button onClick={() => handleSave(item.key)} disabled={savingKey === item.key}>
+                      Save
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   );

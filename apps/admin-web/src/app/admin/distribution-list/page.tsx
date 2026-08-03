@@ -90,19 +90,19 @@ export default function DistributionListPage() {
     }
   }
 
-  if (authLoading || !user || user.role !== 'app_admin') return <p>Loading…</p>;
+  if (authLoading || !user || user.role !== 'app_admin') return <p className="muted">Loading…</p>;
 
   return (
     <main>
       <h1>Distribution List</h1>
-      <p>
+      <p className="breadcrumb">
         <Link href="/admin">← Admin</Link>
       </p>
-      <p>Recipients of the nightly 8:00 PM Central discrepancy digest email.</p>
+      <p className="muted">Recipients of the nightly 8:00 PM Central discrepancy digest email.</p>
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+      <form onSubmit={handleCreate} className="card field-row">
         <input
           aria-label="Email"
           type="email"
@@ -123,32 +123,40 @@ export default function DistributionListPage() {
       </form>
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="muted">Loading…</p>
+      ) : error ? null : items.length === 0 ? (
+        <p className="empty-state">No digest recipients yet.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th align="left">Email</th>
-              <th align="left">Label</th>
-              <th align="left">Active</th>
-              <th align="left"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} style={{ borderTop: '1px solid #eee' }}>
-                <td>{item.email}</td>
-                <td>{item.label ?? '—'}</td>
-                <td>{item.active ? 'Yes' : 'No'}</td>
-                <td>
-                  <button onClick={() => handleRemove(item.id)} disabled={removingId === item.id}>
-                    Remove
-                  </button>
-                </td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Label</th>
+                <th>Active</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.email}</td>
+                  <td>{item.label ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${item.active ? 'badge-success' : 'badge-neutral'}`}>
+                      {item.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn-danger" onClick={() => handleRemove(item.id)} disabled={removingId === item.id}>
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   );

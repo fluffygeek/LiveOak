@@ -177,34 +177,38 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
     }
   }
 
-  if (authLoading || !user) return <p>Loading…</p>;
-  if (loading) return <p>Loading record…</p>;
-  if (error && !job) return <p style={{ color: 'crimson' }}>{error}</p>;
+  if (authLoading || !user) return <p className="muted">Loading…</p>;
+  if (loading) return <p className="muted">Loading record…</p>;
+  if (error && !job) return <p className="alert alert-error">{error}</p>;
   if (!job) return null;
 
   return (
     <main>
-      <p>
+      <p className="breadcrumb">
         <Link href="/records">← Records</Link>
       </p>
       <h1>Job {job.jobNumber}</h1>
-      <p>
-        Status: <strong>{job.status}</strong> · Address verification:{' '}
-        <strong>{job.addressVerificationStatus}</strong>
-        {job.isDuplicate && <span style={{ color: '#b45309' }}> · 🔁 Duplicate</span>}
+      <p className="muted">
+        Status: <strong>{job.status}</strong> · Address verification: <strong>{job.addressVerificationStatus}</strong>
+        {job.isDuplicate && (
+          <>
+            {' '}
+            <span className="badge badge-info">Duplicate</span>
+          </>
+        )}
       </p>
 
-      {notice && <p style={{ color: 'green' }}>{notice}</p>}
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {notice && <p className="alert alert-success">{notice}</p>}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      <section>
+      <section className="card">
         <h2>Record</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: 8, maxWidth: 480 }}>
-          <label>Job number</label>
-          <input value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} />
+        <div className="field-grid">
+          <label htmlFor="job-number">Job number</label>
+          <input id="job-number" value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} />
 
-          <label>Work code</label>
-          <select value={workCodeId} onChange={(e) => setWorkCodeId(e.target.value)}>
+          <label htmlFor="work-code">Work code</label>
+          <select id="work-code" value={workCodeId} onChange={(e) => setWorkCodeId(e.target.value)}>
             {workCodes.map((wc) => (
               <option key={wc.id} value={wc.id}>
                 {wc.code}
@@ -212,59 +216,76 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
             ))}
           </select>
 
-          <label>Footage</label>
-          <input value={footage} onChange={(e) => setFootage(e.target.value)} />
+          <label htmlFor="footage">Footage</label>
+          <input id="footage" value={footage} onChange={(e) => setFootage(e.target.value)} />
 
-          <label>Address line 1</label>
-          <input value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
+          <label htmlFor="address-1">Address line 1</label>
+          <input id="address-1" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
 
-          <label>Address line 2</label>
-          <input value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} />
+          <label htmlFor="address-2">Address line 2</label>
+          <input id="address-2" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} />
 
-          <label>City</label>
-          <input value={city} onChange={(e) => setCity(e.target.value)} />
+          <label htmlFor="city">City</label>
+          <input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
 
-          <label>State</label>
-          <span title="State is the record's partition key and cannot be changed here.">{state}</span>
+          <span className="field-label">State</span>
+          <span className="muted" title="State is the record's partition key and cannot be changed here.">
+            {state}
+          </span>
 
-          <label>ZIP</label>
-          <input value={zip} onChange={(e) => setZip(e.target.value)} />
+          <label htmlFor="zip">ZIP</label>
+          <input id="zip" value={zip} onChange={(e) => setZip(e.target.value)} />
 
-          <label>Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <label htmlFor="notes">Notes</label>
+          <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <button onClick={handleSave} disabled={saving} style={{ marginTop: 8 }}>
+        <button className="form-actions" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
         </button>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section className="card section">
         <h2>Status</h2>
-        <button onClick={() => handleSetStatus('closed')} disabled={job.status === 'closed'}>
-          Mark Closed
-        </button>{' '}
-        <button
-          onClick={() => handleSetStatus('pictures_downloaded')}
-          disabled={job.status === 'pictures_downloaded'}
-        >
-          Mark Pictures Downloaded
-        </button>{' '}
-        <button onClick={() => handleSetStatus('submitted')} disabled={job.status === 'submitted'}>
-          Revert to Submitted
-        </button>
+        <div className="field-row">
+          <button onClick={() => handleSetStatus('closed')} disabled={job.status === 'closed'}>
+            Mark Closed
+          </button>
+          <button
+            onClick={() => handleSetStatus('pictures_downloaded')}
+            disabled={job.status === 'pictures_downloaded'}
+          >
+            Mark Pictures Downloaded
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={() => handleSetStatus('submitted')}
+            disabled={job.status === 'submitted'}
+          >
+            Revert to Submitted
+          </button>
+        </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section className="card section">
         <h2>Discrepancy</h2>
         {job.isDiscrepancy ? (
           <div>
-            <p>Flagged. Reason: {reasons.find((r) => r.id === job.discrepancyReasonId)?.label ?? job.discrepancyReasonId}</p>
-            {job.discrepancyNotes && <p>Notes: {job.discrepancyNotes}</p>}
-            <button onClick={handleClearDiscrepancy}>Clear Discrepancy</button>
+            <p>
+              <span className="badge badge-warning">Flagged</span>{' '}
+              {reasons.find((r) => r.id === job.discrepancyReasonId)?.label ?? job.discrepancyReasonId}
+            </p>
+            {job.discrepancyNotes && <p className="muted">Notes: {job.discrepancyNotes}</p>}
+            <button className="btn-danger" onClick={handleClearDiscrepancy}>
+              Clear Discrepancy
+            </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select value={selectedReasonId} onChange={(e) => setSelectedReasonId(e.target.value)}>
+          <div className="field-row">
+            <select
+              aria-label="Discrepancy reason"
+              value={selectedReasonId}
+              onChange={(e) => setSelectedReasonId(e.target.value)}
+            >
               <option value="">Select a reason…</option>
               {reasons.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -273,6 +294,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               ))}
             </select>
             <input
+              aria-label="Discrepancy notes"
               placeholder="Notes (optional)"
               value={discrepancyNotes}
               onChange={(e) => setDiscrepancyNotes(e.target.value)}
@@ -282,59 +304,67 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
         )}
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section className="card section">
         <h2>Photos ({job.photos.length})</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {job.photos.map((photo) =>
-            photo.downloadUrl ? (
-              <a
-                key={photo.id}
-                href={photo.downloadUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Open full-size photo for job ${job.jobNumber}`}
-              >
-                <img
-                  src={photo.downloadUrl}
-                  alt={`Photo uploaded for job ${job.jobNumber}`}
-                  style={{ width: 100, height: 100, objectFit: 'cover' }}
-                />
-              </a>
-            ) : (
-              <span key={photo.id}>{photo.s3Key}</span>
-            ),
-          )}
-        </div>
+        {job.photos.length === 0 ? (
+          <p className="empty-state">No photos uploaded.</p>
+        ) : (
+          <div className="photo-grid">
+            {job.photos.map((photo) =>
+              photo.downloadUrl ? (
+                <a
+                  key={photo.id}
+                  href={photo.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open full-size photo for job ${job.jobNumber}`}
+                >
+                  <img src={photo.downloadUrl} alt={`Photo uploaded for job ${job.jobNumber}`} className="photo-thumb" />
+                </a>
+              ) : (
+                <span key={photo.id} className="muted">
+                  {photo.s3Key}
+                </span>
+              ),
+            )}
+          </div>
+        )}
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section className="card section">
         <h2>Audit Log</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th align="left">When</th>
-              <th align="left">Who</th>
-              <th align="left">Action</th>
-              <th align="left">Field</th>
-              <th align="left">Old → New</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditLog.map((entry) => (
-              <tr key={entry.id} style={{ borderTop: '1px solid #eee' }}>
-                <td>{new Date(entry.occurredAt).toLocaleString()}</td>
-                <td>{entry.actorDisplayName ?? entry.actorEmail ?? entry.actorId}</td>
-                <td>{entry.action}</td>
-                <td>{entry.fieldName ?? '—'}</td>
-                <td>
-                  {entry.fieldName
-                    ? `${JSON.stringify(entry.oldValue) ?? 'null'} → ${JSON.stringify(entry.newValue) ?? 'null'}`
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {auditLog.length === 0 ? (
+          <p className="empty-state">No audit history yet.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Who</th>
+                  <th>Action</th>
+                  <th>Field</th>
+                  <th>Old → New</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLog.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{new Date(entry.occurredAt).toLocaleString()}</td>
+                    <td>{entry.actorDisplayName ?? entry.actorEmail ?? entry.actorId}</td>
+                    <td>{entry.action}</td>
+                    <td>{entry.fieldName ?? '—'}</td>
+                    <td>
+                      {entry.fieldName
+                        ? `${JSON.stringify(entry.oldValue) ?? 'null'} → ${JSON.stringify(entry.newValue) ?? 'null'}`
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );
