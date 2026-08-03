@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Button, FlatList, RefreshControl, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useApiClient } from '../src/lib/api-client';
 import type { SubmittedJob } from '../src/lib/types';
+import { Button } from '../src/components/Button';
+import { Badge } from '../src/components/Badge';
+import { EmptyState } from '../src/components/EmptyState';
+import { colors, spacing } from '../src/theme';
 
 /**
  * Read-only. No edit/delete affordances anywhere on this screen — submitted
@@ -44,50 +48,45 @@ export default function Weekly() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, padding: 16 }}>
-      <Text style={{ marginBottom: 12, color: '#666' }}>
-        This week's submissions — resets Sunday midnight Eastern.
-      </Text>
+    <View style={styles.container}>
+      <Text style={styles.subtitle}>This week's submissions — resets Sunday midnight Eastern.</Text>
       {loadError ? (
-        <View style={{ alignItems: 'center', gap: 12, marginTop: 24 }}>
-          <Text>Could not load your submissions. Check your connection and try again.</Text>
-          <Button title="Retry" onPress={load} />
+        <View style={[styles.center, { gap: spacing.md, marginTop: spacing.xl }]}>
+          <Text style={styles.muted}>Could not load your submissions. Check your connection and try again.</Text>
+          <Button title="Retry" onPress={load} variant="secondary" />
         </View>
       ) : (
         <FlatList
           data={jobs}
           keyExtractor={(job) => job.id}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={async () => {
-                setRefreshing(true);
-                try {
-                  await load();
-                } finally {
-                  setRefreshing(false);
-                }
-              }}
-            />
-          }
-          ListEmptyComponent={<Text>No jobs submitted this week yet.</Text>}
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            try {
+              await load();
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+          ListEmptyComponent={<EmptyState label="No jobs submitted this week yet." />}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
-            <View style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: '#eee' }}>
-              <Text style={{ fontWeight: '600' }}>{item.jobNumber}</Text>
-              <Text>
+            <View style={styles.row}>
+              <Text style={styles.jobNumber}>{item.jobNumber}</Text>
+              <Text style={styles.address}>
                 {item.addressLine1}, {item.city} {item.zip}
               </Text>
-              <Text style={{ color: '#666' }}>
+              <Text style={styles.muted}>
                 {new Date(item.submittedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET
               </Text>
-              {item.isDiscrepancy && <Text style={{ color: '#b45309' }}>⚠️ Flagged for discrepancy</Text>}
+              {item.isDiscrepancy && <Badge label="Discrepancy" variant="warning" />}
             </View>
           )}
         />
@@ -95,3 +94,38 @@ export default function Weekly() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: spacing.lg,
+    backgroundColor: colors.bg,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subtitle: {
+    marginBottom: spacing.md,
+    color: colors.textMuted,
+  },
+  muted: {
+    color: colors.textMuted,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  row: {
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  jobNumber: {
+    fontWeight: '600',
+    color: colors.text,
+  },
+  address: {
+    color: colors.text,
+  },
+});

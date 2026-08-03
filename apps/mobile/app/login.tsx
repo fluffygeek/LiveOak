@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Button, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
+import { useState } from 'react';
 import { useAuth } from '../src/lib/auth-context';
 import { signInWithGoogle, isSignInCancelled } from '../src/lib/google-signin';
+import { Button } from '../src/components/Button';
+import { colors, spacing } from '../src/theme';
 
 export default function Login() {
   const { user, signInWithIdToken } = useAuth();
@@ -28,10 +30,30 @@ export default function Login() {
   }
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
-      <Text style={{ fontSize: 20, fontWeight: '600' }}>LiveOak Technician</Text>
-      <Button title={signingIn ? 'Signing in…' : 'Sign in with Google'} onPress={handleSignIn} disabled={signingIn} />
-      {error && <Text style={{ color: 'crimson' }}>{error}</Text>}
+    <View style={styles.container}>
+      <Text style={styles.title}>LiveOak Technician</Text>
+      <Button title={signingIn ? 'Signing in…' : 'Sign in with Google'} onPress={handleSignIn} loading={signingIn} />
+      {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
+    backgroundColor: colors.bg,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  error: {
+    color: colors.danger,
+    textAlign: 'center',
+  },
+});
