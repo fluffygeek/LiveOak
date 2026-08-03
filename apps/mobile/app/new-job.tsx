@@ -1,25 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Button,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
-  Pressable,
-} from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useApiClient } from '../src/lib/api-client';
 import type { JobDraft, JobDraftPhoto, WorkCode } from '../src/lib/types';
+import { Button } from '../src/components/Button';
+import { TextField } from '../src/components/TextField';
+import { colors, radius, spacing } from '../src/theme';
 
 export default function NewJob() {
   const { apiFetch } = useApiClient();
   const [draft, setDraft] = useState<JobDraft | null>(null);
   const [workCodes, setWorkCodes] = useState<WorkCode[]>([]);
   const [photos, setPhotos] = useState<JobDraftPhoto[]>([]);
+  // Local capture previews, keyed by photo id — only available for photos
+  // added this session (we have the on-device URI right after capture).
+  // Photos loaded from a resumed draft have no download endpoint, so they
+  // fall back to a placeholder tile.
+  const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -188,8 +186,9 @@ export default function NewJob() {
         body: JSON.stringify({ key, contentType }),
       });
       if (confirmRes.ok) {
-        const confirmed = await confirmRes.json();
+        const confirmed: JobDraftPhoto = await confirmRes.json();
         setPhotos((prev) => [...prev, confirmed]);
+        setPhotoPreviews((prev) => ({ ...prev, [confirmed.id]: asset.uri }));
       }
     } finally {
       setUploading(false);
@@ -241,8 +240,8 @@ export default function NewJob() {
 
   if (loading || !draft) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+      <View style={styles.center}>
+        <Text style={styles.muted}>Loading…</Text>
       </View>
     );
   }
@@ -252,69 +251,72 @@ export default function NewJob() {
     photos.length >= requiredPhotoCount;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontWeight: '600' }}>Job ID</Text>
-      <TextInput value={jobNumber} onChangeText={setJobNumber} style={inputStyle} placeholder="Job number" />
+    <ScrollView contentContainerStyle={styles.container} style={{ backgroundColor: colors.bg }}>
+      <TextField label="Job ID" value={jobNumber} onChangeText={setJobNumber} placeholder="Job number" />
 
-      <Text style={{ fontWeight: '600' }}>Work Code</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {workCodes.map((wc) => (
-          <Pressable
-            key={wc.id}
-            onPress={() => setWorkCodeId(wc.id)}
-            style={{
-              padding: 8,
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: wc.id === workCodeId ? '#0a7' : '#ccc',
-              backgroundColor: wc.id === workCodeId ? '#e6fff5' : 'white',
-            }}
-          >
-            <Text>{wc.code}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {selectedWorkCode && (
-        <Text style={{ color: '#666' }}>
-          {photos.length} of {selectedWorkCode.requiredPhotoCount} photos required
-        </Text>
-      )}
-
-      <Text style={{ fontWeight: '600' }}>Footage</Text>
-      <TextInput value={footage} onChangeText={setFootage} keyboardType="numeric" style={inputStyle} />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ fontWeight: '600' }}>New build (skip USPS verification)</Text>
-        <Switch value={isNewBuild} onValueChange={setIsNewBuild} />
+      <View>
+        <Text style={styles.sectionLabel}>Work Code</Text>
+        <View style={styles.chipRow}>
+          {workCodes.map((wc) => (
+            <Pressable
+              key={wc.id}
+              onPress={() => setWorkCodeId(wc.id)}
+              style={[styles.chip, wc.id === workCodeId && styles.chipSelected]}
+            >
+              <Text style={[styles.chipLabel, wc.id === workCodeId && styles.chipLabelSelected]}>{wc.code}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {selectedWorkCode && (
+          <Text style={styles.muted}>
+            {photos.length} of {selectedWorkCode.requiredPhotoCount} photos required
+          </Text>
+        )}
       </View>
 
-      <Text style={{ fontWeight: '600' }}>Address</Text>
-      <TextInput value={addressLine1} onChangeText={setAddressLine1} style={inputStyle} placeholder="Line 1" />
-      <TextInput value={addressLine2} onChangeText={setAddressLine2} style={inputStyle} placeholder="Line 2 (optional)" />
-      <TextInput value={city} onChangeText={setCity} style={inputStyle} placeholder="City" />
-      <TextInput value={state} onChangeText={setState} style={inputStyle} placeholder="State (2-letter)" maxLength={2} />
-      <TextInput value={zip} onChangeText={setZip} style={inputStyle} placeholder="ZIP" keyboardType="numeric" />
+      <TextField label="Footage" value={footage} onChangeText={setFootage} keyboardType="numeric" />
 
-      <Button title={verifying ? 'Verifying…' : 'Verify Address'} onPress={handleVerifyAddress} disabled={verifying} />
+      <View style={styles.row}>
+        <Text style={styles.sectionLabel}>New build (skip USPS verification)</Text>
+        <Switch value={isNewBuild} onValueChange={setIsNewBuild} trackColor={{ true: colors.primary }} />
+      </View>
+
+      <View style={styles.addressGroup}>
+        <Text style={styles.sectionLabel}>Address</Text>
+        <TextField label="Line 1" value={addressLine1} onChangeText={setAddressLine1} />
+        <TextField label="Line 2 (optional)" value={addressLine2} onChangeText={setAddressLine2} />
+        <TextField label="City" value={city} onChangeText={setCity} />
+        <TextField label="State" value={state} onChangeText={setState} maxLength={2} />
+        <TextField label="ZIP" value={zip} onChangeText={setZip} keyboardType="numeric" />
+      </View>
+
+      <Button title={verifying ? 'Verifying…' : 'Verify Address'} onPress={handleVerifyAddress} loading={verifying} variant="secondary" />
       <AddressVerificationStatus draft={draft} />
 
-      <Text style={{ fontWeight: '600' }}>Notes</Text>
-      <TextInput value={notes} onChangeText={setNotes} style={[inputStyle, { height: 80 }]} multiline />
+      <TextField label="Notes" value={notes} onChangeText={setNotes} style={styles.notesInput} multiline />
 
-      <Button title={saving ? 'Saving…' : 'Save'} onPress={saveDraft} disabled={saving} />
+      <Button title="Save" onPress={saveDraft} loading={saving} variant="secondary" />
 
-      <Text style={{ fontWeight: '600' }}>Photos ({photos.length})</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {photos.map((p) => (
-          <View key={p.id} style={{ width: 64, height: 64, backgroundColor: '#eee', borderRadius: 6 }} />
-        ))}
+      <View>
+        <Text style={styles.sectionLabel}>Photos ({photos.length})</Text>
+        <View style={styles.chipRow}>
+          {photos.map((p) =>
+            photoPreviews[p.id] ? (
+              <Image key={p.id} source={{ uri: photoPreviews[p.id] }} style={styles.photoThumb} />
+            ) : (
+              <View key={p.id} style={styles.photoPlaceholder}>
+                <Text style={styles.photoPlaceholderLabel}>Photo</Text>
+              </View>
+            ),
+          )}
+        </View>
       </View>
-      <Button title={uploading ? 'Uploading…' : 'Add Photo'} onPress={handleAddPhoto} disabled={uploading} />
+      <Button title={uploading ? 'Uploading…' : 'Add Photo'} onPress={handleAddPhoto} loading={uploading} variant="secondary" />
 
-      {error && <Text style={{ color: 'crimson' }}>{error}</Text>}
+      {error && <Text style={styles.error}>{error}</Text>}
 
-      <Button title={submitting ? 'Submitting…' : 'Submit Job'} onPress={handleSubmit} disabled={!canSubmit || submitting} />
-      <Button title="Discard Job" color="crimson" onPress={handleDiscard} />
+      <Button title={submitting ? 'Submitting…' : 'Submit Job'} onPress={handleSubmit} disabled={!canSubmit} loading={submitting} />
+      <Button title="Discard Job" onPress={handleDiscard} variant="danger" />
     </ScrollView>
   );
 }
@@ -327,12 +329,88 @@ function AddressVerificationStatus({ draft }: { draft: JobDraft }) {
     skipped_new_build: '⏭️ Skipped (new build)',
     unavailable: '⚫ USPS unavailable — flagged for payroll admin follow-up.',
   };
-  return <Text>{label[draft.addressVerificationStatus]}</Text>;
+  return <Text style={styles.muted}>{label[draft.addressVerificationStatus]}</Text>;
 }
 
-const inputStyle = {
-  borderWidth: 1,
-  borderColor: '#ccc',
-  borderRadius: 6,
-  padding: 8,
-} as const;
+const styles = StyleSheet.create({
+  container: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+  },
+  muted: {
+    color: colors.textMuted,
+  },
+  error: {
+    color: colors.danger,
+  },
+  sectionLabel: {
+    fontWeight: '600',
+    fontSize: 13,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  addressGroup: {
+    gap: spacing.sm,
+  },
+  notesInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  chip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: '#eef2fd',
+  },
+  chipLabel: {
+    color: colors.text,
+  },
+  chipLabelSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  photoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radius,
+    backgroundColor: colors.border,
+  },
+  photoPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: radius,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoPlaceholderLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+});
