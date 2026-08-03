@@ -5,11 +5,16 @@ interface TextFieldProps extends TextInputProps {
   label: string;
 }
 
-export function TextField({ label, style, ...props }: TextFieldProps) {
+export function TextField({ label, style, accessibilityLabel, ...props }: TextFieldProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor={colors.textMuted} style={[styles.input, style]} {...props} />
+      <TextInput
+        placeholderTextColor={colors.textMuted}
+        style={[styles.input, style]}
+        accessibilityLabel={accessibilityLabel ?? label}
+        {...props}
+      />
     </View>
   );
 }
