@@ -228,7 +228,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
           <label htmlFor="city">City</label>
           <input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
 
-          <label htmlFor="state">State</label>
+          <span className="field-label">State</span>
           <span className="muted" title="State is the record's partition key and cannot be changed here.">
             {state}
           </span>
@@ -239,7 +239,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
           <label htmlFor="notes">Notes</label>
           <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <button onClick={handleSave} disabled={saving} style={{ marginTop: 12 }}>
+        <button className="form-actions" onClick={handleSave} disabled={saving}>
           {saving ? 'Saving…' : 'Save changes'}
         </button>
       </section>
@@ -309,7 +309,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
         {job.photos.length === 0 ? (
           <p className="empty-state">No photos uploaded.</p>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div className="photo-grid">
             {job.photos.map((photo) =>
               photo.downloadUrl ? (
                 <a
@@ -319,11 +319,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
                   rel="noreferrer"
                   aria-label={`Open full-size photo for job ${job.jobNumber}`}
                 >
-                  <img
-                    src={photo.downloadUrl}
-                    alt={`Photo uploaded for job ${job.jobNumber}`}
-                    style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 6 }}
-                  />
+                  <img src={photo.downloadUrl} alt={`Photo uploaded for job ${job.jobNumber}`} className="photo-thumb" />
                 </a>
               ) : (
                 <span key={photo.id} className="muted">

@@ -114,7 +114,7 @@ export default function RecordsPage() {
             id="filter-state"
             placeholder="e.g. TX"
             maxLength={2}
-            style={{ width: 70 }}
+            className="input-narrow"
             value={filters.state}
             onChange={(e) => setFilters((f) => ({ ...f, state: e.target.value }))}
           />
@@ -237,7 +237,7 @@ export default function RecordsPage() {
         </div>
       )}
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="pagination">
         <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
           Previous
         </button>

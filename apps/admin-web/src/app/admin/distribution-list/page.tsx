@@ -124,7 +124,7 @@ export default function DistributionListPage() {
 
       {loading ? (
         <p className="muted">Loading…</p>
-      ) : items.length === 0 ? (
+      ) : error ? null : items.length === 0 ? (
         <p className="empty-state">No digest recipients yet.</p>
       ) : (
         <div className="table-wrap">

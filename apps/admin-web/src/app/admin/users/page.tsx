@@ -137,7 +137,7 @@ export default function UsersPage() {
 
       {loading ? (
         <p className="muted">Loading…</p>
-      ) : items.length === 0 ? (
+      ) : error ? null : items.length === 0 ? (
         <p className="empty-state">No users yet.</p>
       ) : (
         <div className="table-wrap">

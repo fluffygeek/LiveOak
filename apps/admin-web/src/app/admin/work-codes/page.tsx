@@ -138,7 +138,7 @@ export default function WorkCodesPage() {
 
       {loading ? (
         <p className="muted">Loading…</p>
-      ) : items.length === 0 ? (
+      ) : error ? null : items.length === 0 ? (
         <p className="empty-state">No work codes yet.</p>
       ) : (
         <div className="table-wrap">

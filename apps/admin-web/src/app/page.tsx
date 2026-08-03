@@ -20,13 +20,20 @@ export default function HomePage() {
     );
   }
 
+  const guidance =
+    user.role === 'app_admin'
+      ? 'Use the navigation above to get to Records, Duplicates, or Admin.'
+      : user.role === 'payroll_admin'
+        ? 'Use the navigation above to get to Records or Duplicates.'
+        : "Technicians don't have access to this web portal — use the LiveOak mobile app to submit jobs.";
+
   return (
     <main>
       <h1>Welcome back</h1>
       <p className="muted">
         Signed in as {user.email} · <span className="role-badge">{user.role.replace('_', ' ')}</span>
       </p>
-      <p>Use the navigation above to get to Records, Duplicates, or Admin.</p>
+      <p>{guidance}</p>
     </main>
   );
 }

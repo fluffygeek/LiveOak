@@ -119,7 +119,7 @@ export default function DiscrepancyReasonsPage() {
 
       {loading ? (
         <p className="muted">Loading…</p>
-      ) : items.length === 0 ? (
+      ) : error ? null : items.length === 0 ? (
         <p className="empty-state">No discrepancy reasons yet.</p>
       ) : (
         <div className="table-wrap">
