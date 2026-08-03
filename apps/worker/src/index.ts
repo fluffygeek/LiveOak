@@ -1,6 +1,8 @@
 import { Queue, Worker } from 'bullmq';
 import { createDb } from '@liveoak/db';
 import { loadEnv } from './env.js';
+import { logger } from './lib/logger.js';
+import { initSentry, captureException, flushSentry } from './lib/sentry.js';
 import { createQueueRedisConnection, createWorkerRedisConnection } from './redis.js';
 import { reconcileDuplicates } from './jobs/reconcileDuplicates.js';
 import { sendDiscrepancyDigest } from './jobs/discrepancyDigest.js';
@@ -15,11 +17,15 @@ const JOB_RETENTION = { removeOnComplete: 1000, removeOnFail: 5000 };
 
 async function main() {
   const env = loadEnv();
+  initSentry(env.SENTRY_DSN);
   const queueConnection = createQueueRedisConnection();
   const workerConnection = createWorkerRedisConnection();
   const db = createDb(env.DATABASE_URL);
   const queue = new Queue(QUEUE_NAME, { connection: queueConnection });
-  queue.on('error', (err) => console.error('Queue error:', err));
+  queue.on('error', (err) => {
+    logger.error({ err }, 'Queue error');
+    captureException(err);
+  });
 
   // Repeatable schedulers. `upsertJobScheduler` is idempotent across
   // redeploys/multiple instances so restarts don't create duplicate
@@ -57,30 +63,36 @@ async function main() {
     { connection: workerConnection },
   );
 
-  worker.on('error', (err) => console.error('Worker error:', err));
+  worker.on('error', (err) => {
+    logger.error({ err }, 'Worker error');
+    captureException(err);
+  });
   worker.on('failed', (job, err) => {
-    console.error(`Job ${job?.name} (${job?.id}) failed:`, err);
+    logger.error({ err, jobName: job?.name, jobId: job?.id }, 'Job failed');
+    captureException(err);
   });
 
-  console.log('LiveOak worker started, listening on queue:', QUEUE_NAME);
+  logger.info({ queue: QUEUE_NAME }, 'LiveOak worker started');
 
   let shuttingDown = false;
   async function shutdown(signal: string) {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`Received ${signal}, shutting down gracefully...`);
+    logger.info({ signal }, 'Received signal, shutting down gracefully');
     let exitCode = 0;
     try {
       await worker.close();
-    } catch (error) {
+    } catch (err) {
       exitCode = 1;
-      console.error('Worker shutdown failed:', error);
+      logger.error({ err }, 'Worker shutdown failed');
+      captureException(err);
     }
     try {
       await queue.close();
-    } catch (error) {
+    } catch (err) {
       exitCode = 1;
-      console.error('Queue shutdown failed:', error);
+      logger.error({ err }, 'Queue shutdown failed');
+      captureException(err);
     }
     workerConnection.disconnect();
     queueConnection.disconnect();
@@ -90,7 +102,9 @@ async function main() {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch(async (err) => {
+  logger.error({ err }, 'Fatal error during worker startup');
+  captureException(err);
+  await flushSentry();
   process.exit(1);
 });

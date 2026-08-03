@@ -3,6 +3,7 @@ import type { Job } from 'bullmq';
 import { jobs, users, workCodes, discrepancyReasons, distributionList, type Db } from '@liveoak/db';
 import type { Env } from '../env.js';
 import { sendEmail } from '../lib/postmark.js';
+import { logger } from '../lib/logger.js';
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -65,13 +66,13 @@ function renderHtml(rows: DigestRow[]): string {
  */
 export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promise<void> {
   if (!env.POSTMARK_SERVER_TOKEN || !env.DIGEST_EMAIL_FROM) {
-    console.warn('sendDiscrepancyDigest: POSTMARK_SERVER_TOKEN/DIGEST_EMAIL_FROM not configured, skipping run.');
+    logger.warn('sendDiscrepancyDigest: POSTMARK_SERVER_TOKEN/DIGEST_EMAIL_FROM not configured, skipping run.');
     return;
   }
 
   const recipients = await db.select().from(distributionList).where(eq(distributionList.active, true));
   if (recipients.length === 0) {
-    console.log('sendDiscrepancyDigest: no active distribution_list recipients, skipping run.');
+    logger.info('sendDiscrepancyDigest: no active distribution_list recipients, skipping run.');
     return;
   }
 
@@ -97,7 +98,7 @@ export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promis
     .orderBy(desc(jobs.submittedAt));
 
   if (flagged.length === 0) {
-    console.log('sendDiscrepancyDigest: no discrepancies flagged, skipping run.');
+    logger.info('sendDiscrepancyDigest: no discrepancies flagged, skipping run.');
     return;
   }
 

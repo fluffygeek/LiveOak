@@ -7,6 +7,11 @@ RUN corepack enable
 
 WORKDIR /repo
 
+# WORKDIR creates /repo as root; COPY --chown only chowns the copied
+# contents, not the directory itself, so pnpm (running as node below) would
+# otherwise fail to write its own temp files directly into /repo.
+RUN chown node:node /repo
+
 COPY --chown=node:node . .
 
 # node:20-slim's built-in unprivileged `node` user, so the API doesn't run

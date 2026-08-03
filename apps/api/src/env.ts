@@ -27,6 +27,10 @@ const envSchema = z.object({
   // Set for S3-compatible providers (Cloudflare R2, MinIO); leave unset for real AWS S3.
   S3_ENDPOINT: z.string().optional(),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  // Optional: error monitoring is a no-op without this configured. Blank
+  // values are normalized to undefined so an empty env var behaves the same
+  // as an unset one, rather than being handed to Sentry.init() as "".
+  SENTRY_DSN: z.preprocess((val) => (val === '' ? undefined : val), z.string().url().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

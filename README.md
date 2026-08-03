@@ -12,7 +12,9 @@ Node.js/TypeScript API and PostgreSQL.
 - `apps/mobile` — Expo app for technicians (iOS/Android)
 - `packages/db` — Drizzle schema + hand-authored partitioned-table migration
 - `packages/shared-types` — roles, enums, and zod schemas shared across apps
+- `packages/usps` — shared USPS APIs v3 address-verification client (used by both apps/api and apps/worker)
 - [`docs/phase-0-checklist.md`](docs/phase-0-checklist.md) — external setup steps (Google OAuth, USPS API, infra) needed before Phase 1
+- [`docs/operations.md`](docs/operations.md) — RBAC/S3 audit, DST and USPS-outage test coverage, error monitoring, and the operations runbook
 
 The full architecture, data model, and phased build plan (with Mermaid
 diagrams for architecture, data model, mobile/web flows, nightly jobs, and a

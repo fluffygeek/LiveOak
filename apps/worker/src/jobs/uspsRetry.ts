@@ -3,6 +3,7 @@ import type { Job } from 'bullmq';
 import { verifyAddressWithUsps } from '@liveoak/usps';
 import { jobs, auditLog, SYSTEM_USER_ID, type Db } from '@liveoak/db';
 import type { Env } from '../env.js';
+import { logger } from '../lib/logger.js';
 
 // Caps how many records one run re-verifies, so a large backlog after a
 // prolonged USPS outage doesn't turn an hourly job into an hours-long one.
@@ -17,7 +18,7 @@ const BATCH_LIMIT = 50;
  */
 export async function retryUspsVerification(db: Db, env: Env, _job: Job): Promise<void> {
   if (!env.USPS_CLIENT_ID || !env.USPS_CLIENT_SECRET) {
-    console.warn('retryUspsVerification: USPS_CLIENT_ID/USPS_CLIENT_SECRET not configured, skipping run.');
+    logger.warn('retryUspsVerification: USPS_CLIENT_ID/USPS_CLIENT_SECRET not configured, skipping run.');
     return;
   }
 
