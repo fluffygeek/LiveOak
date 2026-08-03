@@ -23,24 +23,38 @@ export default function AppConfigPage() {
     if (!authLoading && (!user || user.role !== 'app_admin')) router.replace('/');
   }, [authLoading, user, router]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/config');
-      if (!res.ok) {
-        setError('Could not load app config.');
-        return;
+  // Every row's input is editable at once, so a reload after saving one key
+  // must not clobber edits typed into other rows. `resetKeys` limits which
+  // drafts get overwritten from the server response; omitted for the
+  // initial load, where every row should start from the server value.
+  const load = useCallback(
+    async (resetKeys?: string[]) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await apiFetch('/config');
+        if (!res.ok) {
+          setError('Could not load app config.');
+          return;
+        }
+        const body: AppConfigEntry[] = await res.json();
+        setItems(body);
+        setDrafts((prev) =>
+          Object.fromEntries(
+            body.map((entry) => [
+              entry.key,
+              resetKeys && !resetKeys.includes(entry.key) ? (prev[entry.key] ?? JSON.stringify(entry.value)) : JSON.stringify(entry.value),
+            ]),
+          ),
+        );
+      } catch {
+        setError('Could not load app config. Check your connection.');
+      } finally {
+        setLoading(false);
       }
-      const body: AppConfigEntry[] = await res.json();
-      setItems(body);
-      setDrafts(Object.fromEntries(body.map((entry) => [entry.key, JSON.stringify(entry.value)])));
-    } catch {
-      setError('Could not load app config. Check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiFetch]);
+    },
+    [apiFetch],
+  );
 
   useEffect(() => {
     load();
@@ -66,7 +80,7 @@ export default function AppConfigPage() {
         setError(`Could not save "${key}".`);
         return;
       }
-      await load();
+      await load([key]);
     } catch {
       setError(`Could not save "${key}". Check your connection.`);
     } finally {
@@ -104,6 +118,7 @@ export default function AppConfigPage() {
                 <td>{item.key}</td>
                 <td>
                   <input
+                    aria-label={`Value for ${item.key}`}
                     value={drafts[item.key] ?? ''}
                     onChange={(e) => setDrafts((d) => ({ ...d, [item.key]: e.target.value }))}
                     style={{ width: 200 }}

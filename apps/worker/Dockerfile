@@ -8,9 +8,15 @@ RUN corepack enable
 
 WORKDIR /repo
 
-COPY . .
+COPY --chown=node:node . .
 
-RUN pnpm install --frozen-lockfile
+# node:20-slim's built-in unprivileged `node` user, so the worker doesn't run
+# as root inside the container.
+USER node
+
+# Filtered to @liveoak/worker and its workspace dependencies (db,
+# shared-types, usps) — skips installing apps/admin-web, apps/api, apps/mobile's deps.
+RUN pnpm install --filter '@liveoak/worker...' --prod --frozen-lockfile
 
 # The worker is run via tsx (see apps/worker/package.json "start"), which
 # transpiles TypeScript — including the workspace packages it imports — at

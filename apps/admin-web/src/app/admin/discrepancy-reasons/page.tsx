@@ -19,6 +19,7 @@ export default function DiscrepancyReasonsPage() {
   const [label, setLabel] = useState('');
   const [sortOrder, setSortOrder] = useState('0');
   const [creating, setCreating] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'app_admin')) router.replace('/');
@@ -71,6 +72,7 @@ export default function DiscrepancyReasonsPage() {
 
   async function handleToggleActive(item: DiscrepancyReason) {
     setError(null);
+    setPendingId(item.id);
     try {
       const res = await apiFetch(`/discrepancy-reasons/${item.id}`, {
         method: 'PATCH',
@@ -84,6 +86,8 @@ export default function DiscrepancyReasonsPage() {
       await load();
     } catch {
       setError('Could not update discrepancy reason. Check your connection.');
+    } finally {
+      setPendingId(null);
     }
   }
 
@@ -99,8 +103,9 @@ export default function DiscrepancyReasonsPage() {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-        <input placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} required />
+        <input aria-label="Label" placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} required />
         <input
+          aria-label="Sort order"
           type="number"
           placeholder="Sort order"
           value={sortOrder}
@@ -131,7 +136,9 @@ export default function DiscrepancyReasonsPage() {
                 <td>{item.sortOrder}</td>
                 <td>{item.active ? 'Yes' : 'No'}</td>
                 <td>
-                  <button onClick={() => handleToggleActive(item)}>{item.active ? 'Deactivate' : 'Activate'}</button>
+                  <button onClick={() => handleToggleActive(item)} disabled={pendingId === item.id}>
+                    {item.active ? 'Deactivate' : 'Activate'}
+                  </button>
                 </td>
               </tr>
             ))}

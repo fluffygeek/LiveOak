@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { distributionList } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
 
@@ -16,7 +16,7 @@ export async function distributionListRoutes(app: FastifyInstance) {
   const guards = [authenticate, requireActiveUser, requireRole(['app_admin'])];
 
   app.get('/distribution-list', { preHandler: guards }, async () => {
-    return app.db.select().from(distributionList);
+    return app.db.select().from(distributionList).orderBy(asc(distributionList.email));
   });
 
   app.post('/distribution-list', { preHandler: guards }, async (request, reply) => {

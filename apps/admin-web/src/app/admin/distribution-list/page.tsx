@@ -20,6 +20,7 @@ export default function DistributionListPage() {
   const [email, setEmail] = useState('');
   const [label, setLabel] = useState('');
   const [creating, setCreating] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'app_admin')) router.replace('/');
@@ -71,7 +72,10 @@ export default function DistributionListPage() {
   }
 
   async function handleRemove(id: string) {
+    const target = items.find((i) => i.id === id);
+    if (!window.confirm(`Remove ${target?.email ?? 'this recipient'} from the digest distribution list?`)) return;
     setError(null);
+    setRemovingId(id);
     try {
       const res = await apiFetch(`/distribution-list/${id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -81,6 +85,8 @@ export default function DistributionListPage() {
       await load();
     } catch {
       setError('Could not remove recipient. Check your connection.');
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -98,13 +104,19 @@ export default function DistributionListPage() {
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
         <input
+          aria-label="Email"
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <input placeholder="Label (optional)" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <input
+          aria-label="Label"
+          placeholder="Label (optional)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
         <button type="submit" disabled={creating}>
           Add
         </button>
@@ -129,7 +141,9 @@ export default function DistributionListPage() {
                 <td>{item.label ?? '—'}</td>
                 <td>{item.active ? 'Yes' : 'No'}</td>
                 <td>
-                  <button onClick={() => handleRemove(item.id)}>Remove</button>
+                  <button onClick={() => handleRemove(item.id)} disabled={removingId === item.id}>
+                    Remove
+                  </button>
                 </td>
               </tr>
             ))}

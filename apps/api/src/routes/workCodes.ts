@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { workCodes } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
 
@@ -27,7 +27,11 @@ const UNIQUE_VIOLATION = '23505';
 export async function workCodeRoutes(app: FastifyInstance) {
   app.get('/work-codes', { preHandler: [authenticate, requireActiveUser] }, async (request) => {
     const includeInactive = request.currentUser!.role === 'app_admin';
-    return app.db.select().from(workCodes).where(includeInactive ? undefined : eq(workCodes.active, true));
+    return app.db
+      .select()
+      .from(workCodes)
+      .where(includeInactive ? undefined : eq(workCodes.active, true))
+      .orderBy(asc(workCodes.code));
   });
 
   const adminGuards = [authenticate, requireActiveUser, requireRole(['app_admin'])];

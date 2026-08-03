@@ -33,7 +33,7 @@ function renderHtml(rows: DigestRow[]): string {
         <td>${escapeHtml(r.technicianEmail ?? '—')}</td>
         <td>${escapeHtml(r.discrepancyReason ?? '—')}</td>
         <td>${escapeHtml(r.discrepancyNotes ?? '')}</td>
-        <td>${r.submittedAt.toLocaleDateString()}</td>
+        <td>${r.submittedAt.toLocaleDateString('en-US', { timeZone: 'America/Chicago' })}</td>
       </tr>`,
     )
     .join('');

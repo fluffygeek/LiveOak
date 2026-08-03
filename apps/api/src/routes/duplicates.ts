@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
-import { jobs, duplicateLinks, auditLog } from '@liveoak/db';
+import { jobs, duplicateLinks } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
+import { recordAction } from '../lib/audit.js';
 
 const resolveBody = z.object({
   jobIds: z.array(z.string().uuid()).min(1),
@@ -68,7 +69,7 @@ export async function duplicateRoutes(app: FastifyInstance) {
             .set({ isDuplicate: false, duplicateGroupId: null, updatedAt: new Date() })
             .where(and(eq(jobs.id, jobId), eq(jobs.state, member.state)));
 
-          await tx.insert(auditLog).values({
+          await recordAction(tx, {
             jobId: member.id,
             jobState: member.state,
             actorId: request.currentUser!.id,

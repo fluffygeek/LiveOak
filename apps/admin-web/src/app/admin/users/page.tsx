@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<UserRow['role']>('technician');
   const [creating, setCreating] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'app_admin')) router.replace('/');
@@ -76,6 +77,7 @@ export default function UsersPage() {
 
   async function handleUpdate(target: UserRow, patch: Partial<Pick<UserRow, 'role' | 'active'>>) {
     setError(null);
+    setPendingId(target.id);
     try {
       const res = await apiFetch(`/users/${target.id}`, {
         method: 'PATCH',
@@ -90,6 +92,8 @@ export default function UsersPage() {
       await load();
     } catch {
       setError('Could not update user. Check your connection.');
+    } finally {
+      setPendingId(null);
     }
   }
 
@@ -105,9 +109,21 @@ export default function UsersPage() {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-        <input type="email" placeholder="Gmail address" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input placeholder="Display name (optional)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        <select value={role} onChange={(e) => setRole(e.target.value as UserRow['role'])}>
+        <input
+          aria-label="Gmail address"
+          type="email"
+          placeholder="Gmail address"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <input
+          aria-label="Display name"
+          placeholder="Display name (optional)"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
+        <select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as UserRow['role'])}>
           {ROLES.map((r) => (
             <option key={r} value={r}>
               {r}
@@ -138,7 +154,12 @@ export default function UsersPage() {
                 <td>{item.email}</td>
                 <td>{item.displayName ?? '—'}</td>
                 <td>
-                  <select value={item.role} onChange={(e) => handleUpdate(item, { role: e.target.value as UserRow['role'] })}>
+                  <select
+                    aria-label={`Role for ${item.email}`}
+                    value={item.role}
+                    disabled={pendingId === item.id || item.id === user.id}
+                    onChange={(e) => handleUpdate(item, { role: e.target.value as UserRow['role'] })}
+                  >
                     {ROLES.map((r) => (
                       <option key={r} value={r}>
                         {r}
@@ -148,7 +169,10 @@ export default function UsersPage() {
                 </td>
                 <td>{item.active ? 'Yes' : 'No'}</td>
                 <td>
-                  <button onClick={() => handleUpdate(item, { active: !item.active })}>
+                  <button
+                    onClick={() => handleUpdate(item, { active: !item.active })}
+                    disabled={pendingId === item.id || item.id === user.id}
+                  >
                     {item.active ? 'Deactivate' : 'Activate'}
                   </button>
                 </td>

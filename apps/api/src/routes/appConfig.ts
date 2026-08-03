@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { appConfig } from '@liveoak/db';
 import { authenticate, requireActiveUser, requireRole } from '../middleware/rbac.js';
 
@@ -17,7 +17,7 @@ export async function appConfigRoutes(app: FastifyInstance) {
   const guards = [authenticate, requireActiveUser, requireRole(['app_admin'])];
 
   app.get('/config', { preHandler: guards }, async () => {
-    return app.db.select().from(appConfig);
+    return app.db.select().from(appConfig).orderBy(asc(appConfig.key));
   });
 
   app.patch<{ Params: { key: string } }>('/config/:key', { preHandler: guards }, async (request, reply) => {

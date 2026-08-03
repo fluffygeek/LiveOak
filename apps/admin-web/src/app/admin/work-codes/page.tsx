@@ -20,6 +20,7 @@ export default function WorkCodesPage() {
   const [description, setDescription] = useState('');
   const [requiredPhotoCount, setRequiredPhotoCount] = useState('3');
   const [creating, setCreating] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'app_admin')) router.replace('/');
@@ -48,6 +49,11 @@ export default function WorkCodesPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    const photoCount = Number(requiredPhotoCount);
+    if (!Number.isInteger(photoCount) || photoCount < 3) {
+      setError('Required photos must be a whole number of 3 or more.');
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
@@ -57,7 +63,7 @@ export default function WorkCodesPage() {
         body: JSON.stringify({
           code,
           description: description || undefined,
-          requiredPhotoCount: Number(requiredPhotoCount),
+          requiredPhotoCount: photoCount,
         }),
       });
       if (!res.ok) {
@@ -77,6 +83,7 @@ export default function WorkCodesPage() {
 
   async function handleToggleActive(item: WorkCode) {
     setError(null);
+    setPendingId(item.id);
     try {
       const res = await apiFetch(`/work-codes/${item.id}`, {
         method: 'PATCH',
@@ -90,6 +97,8 @@ export default function WorkCodesPage() {
       await load();
     } catch {
       setError('Could not update work code. Check your connection.');
+    } finally {
+      setPendingId(null);
     }
   }
 
@@ -105,11 +114,18 @@ export default function WorkCodesPage() {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <form onSubmit={handleCreate} style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-        <input placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
-        <input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input aria-label="Code" placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
         <input
+          aria-label="Description"
+          placeholder="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <input
+          aria-label="Required photos"
           type="number"
           min={3}
+          required
           placeholder="Required photos"
           value={requiredPhotoCount}
           onChange={(e) => setRequiredPhotoCount(e.target.value)}
@@ -141,7 +157,9 @@ export default function WorkCodesPage() {
                 <td>{item.requiredPhotoCount}</td>
                 <td>{item.active ? 'Yes' : 'No'}</td>
                 <td>
-                  <button onClick={() => handleToggleActive(item)}>{item.active ? 'Deactivate' : 'Activate'}</button>
+                  <button onClick={() => handleToggleActive(item)} disabled={pendingId === item.id}>
+                    {item.active ? 'Deactivate' : 'Activate'}
+                  </button>
                 </td>
               </tr>
             ))}

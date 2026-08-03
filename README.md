@@ -49,9 +49,13 @@ Each is deployed as its own Railway service pointing at this repo:
    to the admin-web Vercel URL and, once registered, the mobile app's
    origin). The API listens on Railway's dynamically-assigned `PORT`
    automatically (falls back to `API_PORT`/4000 if unset).
-4. `apps/worker` only needs `DATABASE_URL`, `REDIS_URL`, and (once Phase 5
-   lands) the Postmark/digest variables — it has no HTTP listener, so no
-   public networking or health check is needed.
+4. `apps/worker` needs `DATABASE_URL` and `REDIS_URL` (required — see
+   `apps/worker/src/env.ts`), plus `USPS_CLIENT_ID`/`USPS_CLIENT_SECRET` for
+   the address-verification retry job and `POSTMARK_SERVER_TOKEN`/
+   `DIGEST_EMAIL_FROM` for the discrepancy digest email — both pairs are
+   optional and the corresponding job just logs a warning and skips its run
+   if unset. It has no HTTP listener, so no public networking or health
+   check is needed.
 5. Run `pnpm db:migrate` (and `pnpm db:seed-admin` once) against the Railway
    Postgres instance before the first deploy serves traffic.
 
@@ -64,8 +68,10 @@ Each is deployed as its own Railway service pointing at this repo:
    build command overrides are needed.
 2. Set project environment variables: `NEXT_PUBLIC_API_URL` and `API_URL`
    (both pointing at the Railway API's public URL), `NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_WEB`.
-3. Set `CORS_ORIGINS` on the Railway `apps/api` service to include the
-   resulting `*.vercel.app` (or custom) domain — the admin UI's browser-side
-   `fetch`s to `/jobs`, `/work-codes`, etc. go directly to the API and are
-   blocked by CORS otherwise. The `/api/auth/*` routes are same-origin Next.js
-   route handlers and aren't affected by this.
+3. Set `CORS_ORIGINS` on the Railway `apps/api` service to the exact deployed
+   origin, including its scheme (e.g. `https://liveoak-admin.vercel.app`, or
+   your custom domain) — `@fastify/cors` matches configured string origins
+   exactly, so a wildcard like `https://*.vercel.app` will not work. The
+   admin UI's browser-side `fetch`s to `/jobs`, `/work-codes`, etc. go
+   directly to the API and are blocked by CORS otherwise. The `/api/auth/*`
+   routes are same-origin Next.js route handlers and aren't affected by this.

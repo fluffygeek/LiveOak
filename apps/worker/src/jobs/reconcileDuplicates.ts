@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Job } from 'bullmq';
 import { jobs, duplicateLinks, auditLog, SYSTEM_USER_ID, type Db } from '@liveoak/db';
 
@@ -16,6 +16,7 @@ interface JobRow {
   id: string;
   state: string;
   addressLine1: string;
+  addressLine2: string | null;
   city: string;
   zip: string;
   verifiedAddressLine1: string | null;
@@ -30,15 +31,19 @@ interface JobRow {
 /**
  * Prefers the USPS-verified address when available (more likely to catch
  * duplicates written with different-but-equivalent formatting); falls back
- * to the technician-submitted address otherwise.
+ * to the technician-submitted address otherwise. USPS verification doesn't
+ * return a normalized unit/suite (verifiedAddressLine1 already folds it in
+ * when present), so addressLine2 only applies on the unverified path — two
+ * jobs at the same street address but different units aren't duplicates.
  */
 function addressKey(row: JobRow): string {
   const useVerified = row.addressVerificationStatus === 'verified' && row.verifiedAddressLine1 && row.verifiedZip;
   const line1 = useVerified ? row.verifiedAddressLine1! : row.addressLine1;
+  const line2 = useVerified ? '' : (row.addressLine2 ?? '');
   const city = useVerified ? (row.verifiedCity ?? row.city) : row.city;
   const state = useVerified ? (row.verifiedState ?? row.state) : row.state;
   const zip = (useVerified ? row.verifiedZip! : row.zip).slice(0, 5);
-  return `${normalizePart(line1)}|${normalizePart(city)}|${normalizePart(state)}|${zip}`;
+  return `${normalizePart(line1)}|${normalizePart(line2)}|${normalizePart(city)}|${normalizePart(state)}|${zip}`;
 }
 
 /**
@@ -60,6 +65,7 @@ export async function reconcileDuplicates(db: Db, _job: Job): Promise<void> {
       id: jobs.id,
       state: jobs.state,
       addressLine1: jobs.addressLine1,
+      addressLine2: jobs.addressLine2,
       city: jobs.city,
       zip: jobs.zip,
       verifiedAddressLine1: jobs.verifiedAddressLine1,
@@ -86,8 +92,14 @@ export async function reconcileDuplicates(db: Db, _job: Job): Promise<void> {
     for (const members of groups.values()) {
       if (members.length < 2) continue;
 
-      const existingGroupId = members.find((m) => m.duplicateGroupId)?.duplicateGroupId;
-      const groupId = existingGroupId ?? randomUUID();
+      // Members can carry more than one prior duplicateGroupId if two
+      // formerly-separate groups converge this run (e.g. an admin correction
+      // makes their addresses match). Keep one; the rest are abandoned and
+      // their duplicate_links rows must be cleaned up, or they'd be orphaned
+      // — referencing a groupId no job points to anymore.
+      const priorGroupIds = [...new Set(members.map((m) => m.duplicateGroupId).filter((id): id is string => id !== null))];
+      const groupId = priorGroupIds[0] ?? randomUUID();
+      const abandonedGroupIds = priorGroupIds.slice(1);
 
       for (const member of members) {
         matchedJobIds.add(member.id);
@@ -111,6 +123,10 @@ export async function reconcileDuplicates(db: Db, _job: Job): Promise<void> {
             newValue: true,
           });
         }
+      }
+
+      if (abandonedGroupIds.length > 0) {
+        await tx.delete(duplicateLinks).where(inArray(duplicateLinks.duplicateGroupId, abandonedGroupIds));
       }
     }
 

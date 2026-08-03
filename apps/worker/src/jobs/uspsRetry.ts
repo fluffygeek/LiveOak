@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { Job } from 'bullmq';
 import { verifyAddressWithUsps } from '@liveoak/usps';
 import { jobs, auditLog, SYSTEM_USER_ID, type Db } from '@liveoak/db';
@@ -25,6 +25,9 @@ export async function retryUspsVerification(db: Db, env: Env, _job: Job): Promis
     .select()
     .from(jobs)
     .where(eq(jobs.addressVerificationStatus, 'unavailable'))
+    // Oldest-checked (or never-checked) first, so the same subset can't get
+    // starved indefinitely by always landing past the BATCH_LIMIT cutoff.
+    .orderBy(asc(jobs.addressVerificationCheckedAt))
     .limit(BATCH_LIMIT);
 
   for (const row of stuck) {

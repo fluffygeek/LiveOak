@@ -35,7 +35,7 @@ export default function DuplicatesPage() {
         return;
       }
       const body = await res.json();
-      setGroups(body.groups);
+      setGroups(Array.isArray(body.groups) ? body.groups : []);
     } catch {
       setError('Could not load duplicate groups. Check your connection.');
     } finally {
