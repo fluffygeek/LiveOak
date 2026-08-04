@@ -9,8 +9,8 @@ let configured = false;
  * OAuth client IDs from docs/phase-0-checklist.md.
  *
  * iOS also needs the reversed-client-ID URL scheme registered via the
- * package's Expo config plugin in app.json (see docs/phase-0-checklist.md) —
- * that part is per-project static config, so it isn't set here.
+ * package's Expo config plugin — app.config.js derives it automatically from
+ * EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_IOS, so setting that env var is enough.
  */
 function ensureConfigured() {
   if (configured) return;
