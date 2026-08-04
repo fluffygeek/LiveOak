@@ -5,13 +5,16 @@
 const GOOGLE_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
 
 function reversedIosUrlScheme(iosClientId) {
-  if (!iosClientId.endsWith(GOOGLE_CLIENT_ID_SUFFIX)) {
+  const prefix = iosClientId.endsWith(GOOGLE_CLIENT_ID_SUFFIX)
+    ? iosClientId.slice(0, -GOOGLE_CLIENT_ID_SUFFIX.length)
+    : '';
+  if (!prefix) {
     throw new Error(
       `EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_IOS ("${iosClientId}") doesn't look like a Google ` +
-        `OAuth client ID — expected it to end with "${GOOGLE_CLIENT_ID_SUFFIX}".`,
+        `OAuth client ID — expected a non-empty ID ending with "${GOOGLE_CLIENT_ID_SUFFIX}".`,
     );
   }
-  return `com.googleusercontent.apps.${iosClientId.slice(0, -GOOGLE_CLIENT_ID_SUFFIX.length)}`;
+  return `com.googleusercontent.apps.${prefix}`;
 }
 
 const plugins = ['expo-router', 'expo-camera', 'expo-image-picker'];
