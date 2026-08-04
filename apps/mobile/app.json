@@ -13,6 +13,16 @@
     "android": {
       "package": "com.liveoak.technician"
     },
-    "plugins": ["expo-router", "expo-camera", "expo-image-picker"]
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      "expo-image-picker",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID"
+        }
+      ]
+    ]
   }
 }

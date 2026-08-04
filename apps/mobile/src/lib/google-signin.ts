@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 let configured = false;
@@ -7,11 +8,9 @@ let configured = false;
  * Sign-In module isn't available in Expo Go) and the platform-specific
  * OAuth client IDs from docs/phase-0-checklist.md.
  *
- * iOS additionally needs an `iosClientId` and the native config plugin /
- * GoogleService-Info.plist wired up in app.json — not yet done here since
- * we don't have real iOS OAuth credentials to configure against. Android +
- * web client IDs are sufficient to exercise the flow once Phase 0's Google
- * Cloud setup is complete.
+ * iOS also needs the reversed-client-ID URL scheme registered via the
+ * package's Expo config plugin in app.json (see docs/phase-0-checklist.md) —
+ * that part is per-project static config, so it isn't set here.
  */
 function ensureConfigured() {
   if (configured) return;
@@ -19,7 +18,12 @@ function ensureConfigured() {
   if (!webClientId) {
     throw new Error('EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_WEB is not set');
   }
-  GoogleSignin.configure({ webClientId, offlineAccess: false });
+  const iosClientId =
+    Platform.OS === 'ios' ? process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_IOS : undefined;
+  if (Platform.OS === 'ios' && !iosClientId) {
+    throw new Error('EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID_IOS is not set');
+  }
+  GoogleSignin.configure({ webClientId, iosClientId, offlineAccess: false });
   configured = true;
 }
 
