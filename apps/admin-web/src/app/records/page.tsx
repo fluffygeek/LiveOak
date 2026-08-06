@@ -6,6 +6,20 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth-context';
 import { useApiClient } from '../../lib/api-client';
 import type { Job, JobStatus, WorkCode } from '../../lib/types';
+import { FlagBadges, JobStatusBadge } from '../../components/StatusBadge';
+import { EmptyState } from '../../components/EmptyState';
+import { SkeletonTable } from '../../components/Skeleton';
+import { StatCard } from '../../components/StatCard';
+import {
+  IconAlertTriangle,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClipboardList,
+  IconCopy,
+  IconFilter,
+  IconSearch,
+  IconX,
+} from '../../components/icons';
 
 interface Filters {
   state: string;
@@ -29,6 +43,12 @@ const EMPTY_FILTERS: Filters = {
 
 const PER_PAGE = 25;
 
+function hasActiveFilters(f: Filters): boolean {
+  return Boolean(
+    f.state || f.status || f.workCodeId || f.isDiscrepancy || f.isDuplicate || f.submittedFrom || f.submittedTo,
+  );
+}
+
 /**
  * Payroll admin records dashboard: filterable/paginated list of submitted
  * jobs. See design plan §5 (admin web flow).
@@ -45,6 +65,8 @@ export default function RecordsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [discrepancyTotal, setDiscrepancyTotal] = useState<number | null>(null);
+  const [duplicateTotal, setDuplicateTotal] = useState<number | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/');
@@ -55,6 +77,20 @@ export default function RecordsPage() {
       .then((res) => (res.ok ? res.json() : []))
       .then(setWorkCodes)
       .catch(() => {});
+  }, [apiFetch]);
+
+  // Independent of the current filters, so the strip always reflects the
+  // whole book of records — a payroll admin filtering by state shouldn't see
+  // the discrepancy/duplicate counts silently change with them.
+  useEffect(() => {
+    apiFetch('/jobs?page=1&perPage=1&isDiscrepancy=true')
+      .then((res) => (res.ok ? res.json() : { total: null }))
+      .then((body) => setDiscrepancyTotal(body.total ?? null))
+      .catch(() => setDiscrepancyTotal(null));
+    apiFetch('/jobs?page=1&perPage=1&isDuplicate=true')
+      .then((res) => (res.ok ? res.json() : { total: null }))
+      .then((body) => setDuplicateTotal(body.total ?? null))
+      .catch(() => setDuplicateTotal(null));
   }, [apiFetch]);
 
   const load = useCallback(async () => {
@@ -94,20 +130,59 @@ export default function RecordsPage() {
 
   if (authLoading || !user) return <p className="muted">Loading…</p>;
 
+  const rangeStart = total === 0 ? 0 : (page - 1) * PER_PAGE + 1;
+  const rangeEnd = Math.min(page * PER_PAGE, total);
+
   return (
     <main>
-      <h1>Records</h1>
-      <p className="breadcrumb">
-        <Link href="/duplicates">Duplicate Review Queue →</Link>
-      </p>
+      <div className="page-header">
+        <div>
+          <h1>Records</h1>
+          <p className="page-subtitle">Submitted job records across every technician and state.</p>
+        </div>
+        <div className="page-actions">
+          <Link href="/duplicates" className="btn btn-secondary">
+            Duplicate Review Queue
+          </Link>
+        </div>
+      </div>
+
+      <div className="stat-grid">
+        <StatCard label="Total records" value={total.toLocaleString()} icon={<IconClipboardList />} tone="primary" />
+        <StatCard
+          label="Discrepancies"
+          value={discrepancyTotal === null ? '—' : discrepancyTotal.toLocaleString()}
+          sub="Flagged for payroll review"
+          icon={<IconAlertTriangle />}
+          tone="warning"
+          onClick={() => {
+            setFilters({ ...EMPTY_FILTERS, isDiscrepancy: true });
+            setPage(1);
+          }}
+        />
+        <StatCard
+          label="Duplicates"
+          value={duplicateTotal === null ? '—' : duplicateTotal.toLocaleString()}
+          sub="Awaiting reconciliation"
+          icon={<IconCopy />}
+          tone="info"
+          onClick={() => {
+            setFilters({ ...EMPTY_FILTERS, isDuplicate: true });
+            setPage(1);
+          }}
+        />
+      </div>
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
           setPage(1);
         }}
-        className="card field-row"
+        className="card toolbar"
       >
+        <span className="toolbar-heading">
+          <IconFilter /> Filter records
+        </span>
         <div className="field">
           <label htmlFor="filter-state">State</label>
           <input
@@ -181,28 +256,63 @@ export default function RecordsPage() {
           />
           Duplicates only
         </label>
-        <button type="submit">Filter</button>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            setFilters(EMPTY_FILTERS);
-            setPage(1);
-          }}
-        >
-          Clear
+        <button type="submit">
+          <IconSearch /> Filter
         </button>
+        {hasActiveFilters(filters) && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setFilters(EMPTY_FILTERS);
+              setPage(1);
+            }}
+          >
+            <IconX /> Clear filters
+          </button>
+        )}
       </form>
 
-      {loading && <p className="muted">Loading records…</p>}
-      {error && <p className="alert alert-error">{error}</p>}
+      {error && (
+        <p className="alert alert-error">
+          <IconAlertTriangle />
+          {error}
+        </p>
+      )}
+
+      {loading && <SkeletonTable columns={6} rows={8} />}
 
       {!loading && !error && jobs.length === 0 && (
-        <p className="empty-state">No records match these filters.</p>
+        <EmptyState
+          icon={<IconClipboardList />}
+          title="No records match these filters"
+          subtitle={
+            hasActiveFilters(filters)
+              ? 'Try widening the date range or clearing a filter.'
+              : 'Submitted jobs will show up here once technicians start logging work.'
+          }
+          action={
+            hasActiveFilters(filters) ? (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
+            ) : undefined
+          }
+        />
       )}
 
       {!loading && !error && jobs.length > 0 && (
         <div className="table-wrap">
+          <div className="table-caption">
+            {total.toLocaleString()} record{total === 1 ? '' : 's'}
+          </div>
           <table>
             <thead>
               <tr>
@@ -217,19 +327,29 @@ export default function RecordsPage() {
             <tbody>
               {jobs.map((job) => (
                 <tr key={job.id}>
-                  <td>
+                  <td className="col-primary">
                     <Link href={`/records/${job.id}`}>{job.jobNumber}</Link>
                   </td>
                   <td>{job.state}</td>
                   <td>
-                    {job.addressLine1}, {job.city} {job.zip}
+                    {job.addressLine1}
+                    <span className="cell-sub">
+                      {job.city}, {job.state} {job.zip}
+                    </span>
                   </td>
-                  <td>{job.status}</td>
                   <td>
-                    {job.isDiscrepancy && <span className="badge badge-warning">Discrepancy</span>}{' '}
-                    {job.isDuplicate && <span className="badge badge-info">Duplicate</span>}
+                    <JobStatusBadge status={job.status} />
                   </td>
-                  <td>{new Date(job.submittedAt).toLocaleDateString()}</td>
+                  <td className="col-flags">
+                    <FlagBadges isDiscrepancy={job.isDiscrepancy} isDuplicate={job.isDuplicate} />
+                  </td>
+                  <td>
+                    {new Date(job.submittedAt).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -237,19 +357,30 @@ export default function RecordsPage() {
         </div>
       )}
 
-      <div className="pagination">
-        <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          Previous
-        </button>
-        <span className="muted">Page {page}</span>
-        <button
-          className="btn-secondary"
-          disabled={page * PER_PAGE >= total}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </button>
-      </div>
+      {!loading && !error && total > 0 && (
+        <div className="pagination">
+          <span className="muted">
+            Showing <strong>{rangeStart}–{rangeEnd}</strong> of <strong>{total.toLocaleString()}</strong>
+          </span>
+          <div className="pagination-controls">
+            <button
+              className="btn-secondary btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <IconChevronLeft /> Previous
+            </button>
+            <span className="muted">Page {page}</span>
+            <button
+              className="btn-secondary btn-sm"
+              disabled={page * PER_PAGE >= total}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <IconChevronRight />
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

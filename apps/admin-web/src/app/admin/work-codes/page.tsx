@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../lib/auth-context';
 import { useApiClient } from '../../../lib/api-client';
 import type { WorkCode } from '../../../lib/types';
+import { EmptyState } from '../../../components/EmptyState';
+import { SkeletonTable } from '../../../components/Skeleton';
+import { IconAlertTriangle, IconChevronLeft, IconClipboardList, IconPlus } from '../../../components/icons';
 
 export default function WorkCodesPage() {
   const { user, loading: authLoading } = useAuth();
@@ -106,40 +109,65 @@ export default function WorkCodesPage() {
 
   return (
     <main>
-      <h1>Work Codes</h1>
       <p className="breadcrumb">
-        <Link href="/admin">← Admin</Link>
+        <Link href="/admin">
+          <IconChevronLeft /> Admin
+        </Link>
       </p>
+      <div className="page-header">
+        <div>
+          <h1>Work Codes</h1>
+          <p className="page-subtitle">Codes technicians select in the field, and how many photos each requires.</p>
+        </div>
+      </div>
 
-      {error && <p className="alert alert-error">{error}</p>}
+      {error && (
+        <p className="alert alert-error">
+          <IconAlertTriangle />
+          {error}
+        </p>
+      )}
 
-      <form onSubmit={handleCreate} className="card field-row">
-        <input aria-label="Code" placeholder="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
-        <input
-          aria-label="Description"
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input
-          aria-label="Required photos"
-          type="number"
-          min={3}
-          required
-          placeholder="Required photos"
-          value={requiredPhotoCount}
-          onChange={(e) => setRequiredPhotoCount(e.target.value)}
-          style={{ width: 100 }}
-        />
+      <form onSubmit={handleCreate} className="card toolbar">
+        <span className="toolbar-heading">
+          <IconPlus /> Add a work code
+        </span>
+        <div className="field">
+          <label htmlFor="wc-code">Code</label>
+          <input id="wc-code" aria-label="Code" placeholder="e.g. TRENCH" value={code} onChange={(e) => setCode(e.target.value)} required />
+        </div>
+        <div className="field">
+          <label htmlFor="wc-description">Description</label>
+          <input
+            id="wc-description"
+            aria-label="Description"
+            placeholder="Optional"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="wc-photos">Required photos</label>
+          <input
+            id="wc-photos"
+            aria-label="Required photos"
+            type="number"
+            min={3}
+            required
+            className="input-narrow"
+            value={requiredPhotoCount}
+            onChange={(e) => setRequiredPhotoCount(e.target.value)}
+          />
+        </div>
         <button type="submit" disabled={creating}>
-          Add
+          <IconPlus /> {creating ? 'Adding…' : 'Add'}
         </button>
       </form>
 
       {loading ? (
-        <p className="muted">Loading…</p>
+        <SkeletonTable columns={5} rows={5} />
       ) : error ? null : items.length === 0 ? (
-        <p className="empty-state">No work codes yet.</p>
+        <EmptyState icon={<IconClipboardList />} title="No work codes yet" subtitle="Add the first code technicians will select when submitting a job." />
       ) : (
         <div className="table-wrap">
           <table>
@@ -155,17 +183,20 @@ export default function WorkCodesPage() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <td>{item.code}</td>
-                  <td>{item.description ?? '—'}</td>
+                  <td className="col-primary" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {item.code}
+                  </td>
+                  <td>{item.description ?? <span className="faint">—</span>}</td>
                   <td>{item.requiredPhotoCount}</td>
                   <td>
                     <span className={`badge ${item.active ? 'badge-success' : 'badge-neutral'}`}>
+                      <span className="badge-dot" />
                       {item.active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td>
                     <button
-                      className="btn-secondary"
+                      className="btn-secondary btn-sm"
                       onClick={() => handleToggleActive(item)}
                       disabled={pendingId === item.id}
                     >

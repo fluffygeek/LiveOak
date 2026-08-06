@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../lib/auth-context';
 import { useApiClient } from '../../../lib/api-client';
 import type { AppConfigEntry } from '../../../lib/types';
+import { EmptyState } from '../../../components/EmptyState';
+import { SkeletonTable } from '../../../components/Skeleton';
+import { IconAlertTriangle, IconChevronLeft, IconSliders } from '../../../components/icons';
 
 /** Singleton app settings (USPS kill switch, digest send-hour override, etc). */
 export default function AppConfigPage() {
@@ -92,20 +95,32 @@ export default function AppConfigPage() {
 
   return (
     <main>
-      <h1>App Config</h1>
       <p className="breadcrumb">
-        <Link href="/admin">← Admin</Link>
+        <Link href="/admin">
+          <IconChevronLeft /> Admin
+        </Link>
       </p>
-      <p className="muted">
-        Values are raw JSON (e.g. booleans as <code>true</code>/<code>false</code>, numbers unquoted, strings quoted).
-      </p>
+      <div className="page-header">
+        <div>
+          <h1>App Config</h1>
+          <p className="page-subtitle">
+            Singleton settings such as the USPS kill switch. Values are raw JSON — booleans as{' '}
+            <code>true</code>/<code>false</code>, numbers unquoted, strings quoted.
+          </p>
+        </div>
+      </div>
 
-      {error && <p className="alert alert-error">{error}</p>}
+      {error && (
+        <p className="alert alert-error">
+          <IconAlertTriangle />
+          {error}
+        </p>
+      )}
 
       {loading ? (
-        <p className="muted">Loading…</p>
+        <SkeletonTable columns={4} rows={4} />
       ) : error ? null : items.length === 0 ? (
-        <p className="empty-state">No config entries yet.</p>
+        <EmptyState icon={<IconSliders />} title="No config entries yet" subtitle="Singleton app settings will appear here once seeded." />
       ) : (
         <div className="table-wrap">
           <table>
@@ -120,19 +135,23 @@ export default function AppConfigPage() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.key}>
-                  <td>{item.key}</td>
+                  <td className="col-primary" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {item.key}
+                  </td>
                   <td>
                     <input
                       aria-label={`Value for ${item.key}`}
                       value={drafts[item.key] ?? ''}
                       onChange={(e) => setDrafts((d) => ({ ...d, [item.key]: e.target.value }))}
-                      style={{ width: 200 }}
+                      style={{ width: 200, fontFamily: 'var(--font-mono)' }}
                     />
                   </td>
-                  <td>{new Date(item.updatedAt).toLocaleString()}</td>
+                  <td className="muted" style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
+                    {new Date(item.updatedAt).toLocaleString()}
+                  </td>
                   <td>
-                    <button onClick={() => handleSave(item.key)} disabled={savingKey === item.key}>
-                      Save
+                    <button className="btn-sm" onClick={() => handleSave(item.key)} disabled={savingKey === item.key}>
+                      {savingKey === item.key ? 'Saving…' : 'Save'}
                     </button>
                   </td>
                 </tr>

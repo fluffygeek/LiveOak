@@ -6,6 +6,20 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../lib/auth-context';
 import { useApiClient } from '../../../lib/api-client';
 import type { AuditLogEntry, DiscrepancyReason, JobDetail, WorkCode } from '../../../lib/types';
+import { AddressVerificationBadge, JobStatusBadge } from '../../../components/StatusBadge';
+import { EmptyState } from '../../../components/EmptyState';
+import {
+  IconAlertTriangle,
+  IconCheckCircle,
+  IconChevronLeft,
+  IconCopy,
+  IconHash,
+  IconHistory,
+  IconImage,
+  IconMapPin,
+  IconTag,
+  IconToggleFlag,
+} from '../../../components/icons';
 
 export default function RecordDetailPage({ params }: { params: { id: string } }) {
   const { user, loading: authLoading } = useAuth();
@@ -179,78 +193,203 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
 
   if (authLoading || !user) return <p className="muted">Loading…</p>;
   if (loading) return <p className="muted">Loading record…</p>;
-  if (error && !job) return <p className="alert alert-error">{error}</p>;
+  if (error && !job) {
+    return (
+      <main>
+        <p className="breadcrumb">
+          <Link href="/records">
+            <IconChevronLeft /> Records
+          </Link>
+        </p>
+        <p className="alert alert-error">
+          <IconAlertTriangle />
+          {error}
+        </p>
+      </main>
+    );
+  }
   if (!job) return null;
 
   return (
     <main>
       <p className="breadcrumb">
-        <Link href="/records">← Records</Link>
+        <Link href="/records">
+          <IconChevronLeft /> Records
+        </Link>
       </p>
-      <h1>Job {job.jobNumber}</h1>
-      <p className="muted">
-        Status: <strong>{job.status}</strong> · Address verification: <strong>{job.addressVerificationStatus}</strong>
+      <div className="page-header">
+        <div>
+          <h1>
+            Job <span style={{ fontFamily: 'var(--font-mono)' }}>{job.jobNumber}</span>
+          </h1>
+        </div>
+      </div>
+
+      <div className="summary-strip">
+        <div className="summary-item">
+          <span className="summary-item-label">Status</span>
+          <span className="summary-item-value">
+            <JobStatusBadge status={job.status} />
+          </span>
+        </div>
+        <div className="divider-v" />
+        <div className="summary-item">
+          <span className="summary-item-label">Address verification</span>
+          <span className="summary-item-value">
+            <AddressVerificationBadge status={job.addressVerificationStatus} />
+          </span>
+        </div>
+        <div className="divider-v" />
+        <div className="summary-item">
+          <span className="summary-item-label">Location</span>
+          <span className="summary-item-value">
+            <IconMapPin className="faint" />
+            {job.city}, {job.state}
+          </span>
+        </div>
+        <div className="divider-v" />
+        <div className="summary-item">
+          <span className="summary-item-label">Submitted</span>
+          <span className="summary-item-value">
+            {new Date(job.submittedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+        </div>
         {job.isDuplicate && (
           <>
-            {' '}
-            <span className="badge badge-info">Duplicate</span>
+            <div className="divider-v" />
+            <div className="summary-item">
+              <span className="summary-item-label">Duplicate</span>
+              <span className="summary-item-value">
+                <span className="badge badge-info">
+                  <IconCopy /> Flagged
+                </span>
+              </span>
+            </div>
           </>
         )}
-      </p>
+      </div>
 
-      {notice && <p className="alert alert-success">{notice}</p>}
-      {error && <p className="alert alert-error">{error}</p>}
+      {notice && (
+        <p className="alert alert-success">
+          <IconCheckCircle />
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="alert alert-error">
+          <IconAlertTriangle />
+          {error}
+        </p>
+      )}
 
       <section className="card">
-        <h2>Record</h2>
-        <div className="field-grid">
-          <label htmlFor="job-number">Job number</label>
-          <input id="job-number" value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} />
-
-          <label htmlFor="work-code">Work code</label>
-          <select id="work-code" value={workCodeId} onChange={(e) => setWorkCodeId(e.target.value)}>
-            {workCodes.map((wc) => (
-              <option key={wc.id} value={wc.id}>
-                {wc.code}
-              </option>
-            ))}
-          </select>
-
-          <label htmlFor="footage">Footage</label>
-          <input id="footage" value={footage} onChange={(e) => setFootage(e.target.value)} />
-
-          <label htmlFor="address-1">Address line 1</label>
-          <input id="address-1" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
-
-          <label htmlFor="address-2">Address line 2</label>
-          <input id="address-2" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} />
-
-          <label htmlFor="city">City</label>
-          <input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
-
-          <span className="field-label">State</span>
-          <span className="muted" title="State is the record's partition key and cannot be changed here.">
-            {state}
-          </span>
-
-          <label htmlFor="zip">ZIP</label>
-          <input id="zip" value={zip} onChange={(e) => setZip(e.target.value)} />
-
-          <label htmlFor="notes">Notes</label>
-          <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <div className="card-header">
+          <h2>
+            <IconHash /> Record details
+          </h2>
         </div>
-        <button className="form-actions" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--space-6)', flexWrap: 'wrap', alignItems: 'flex-start', maxWidth: 900 }}>
+          <div style={{ flex: '0 1 560px', minWidth: 300 }}>
+            <div className="field-grid">
+              <label htmlFor="job-number">Job number</label>
+              <input id="job-number" style={{ maxWidth: 220 }} value={jobNumber} onChange={(e) => setJobNumber(e.target.value)} />
+
+              <label htmlFor="work-code">Work code</label>
+              <select id="work-code" style={{ maxWidth: 220 }} value={workCodeId} onChange={(e) => setWorkCodeId(e.target.value)}>
+                {workCodes.map((wc) => (
+                  <option key={wc.id} value={wc.id}>
+                    {wc.code}
+                  </option>
+                ))}
+              </select>
+
+              <label htmlFor="footage">Footage</label>
+              <input id="footage" className="input-narrow" value={footage} onChange={(e) => setFootage(e.target.value)} />
+
+              <label htmlFor="address-1">Address line 1</label>
+              <input id="address-1" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} />
+
+              <label htmlFor="address-2">Address line 2</label>
+              <input id="address-2" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} />
+
+              <label htmlFor="city">City</label>
+              <input id="city" style={{ maxWidth: 260 }} value={city} onChange={(e) => setCity(e.target.value)} />
+
+              <span className="field-label">State</span>
+              <span className="muted" title="State is the record's partition key and cannot be changed here.">
+                {state}
+              </span>
+
+              <label htmlFor="zip">ZIP</label>
+              <input id="zip" className="input-narrow" value={zip} onChange={(e) => setZip(e.target.value)} />
+
+              <label htmlFor="notes">Notes</label>
+              <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+            <button className="form-actions" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
+
+          <div
+            style={{
+              flex: '0 1 240px',
+              minWidth: 220,
+              borderLeft: '1px solid var(--color-border)',
+              paddingLeft: 'var(--space-5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-4)',
+            }}
+          >
+            <div className="summary-item">
+              <span className="summary-item-label">Technician</span>
+              <span className="summary-item-value" style={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)' }}>
+                {job.technicianId}
+              </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-item-label">New build</span>
+              <span className="summary-item-value" style={{ fontSize: '0.875rem' }}>
+                {job.isNewBuild ? 'Yes' : 'No'}
+              </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-item-label">Verified address</span>
+              <span className="summary-item-value" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
+                {job.verifiedAddressLine1
+                  ? `${job.verifiedAddressLine1}, ${job.verifiedCity} ${job.verifiedState} ${job.verifiedZip ?? ''}`
+                  : '—'}
+              </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-item-label">Record created</span>
+              <span className="summary-item-value" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
+                {new Date(job.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-item-label">Last updated</span>
+              <span className="summary-item-value" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
+                {new Date(job.updatedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="card section">
-        <h2>Status</h2>
+        <div className="card-header">
+          <h2>
+            <IconToggleFlag /> Status
+          </h2>
+        </div>
         <div className="field-row">
           <button onClick={() => handleSetStatus('closed')} disabled={job.status === 'closed'}>
             Mark Closed
           </button>
           <button
+            className="btn-secondary"
             onClick={() => handleSetStatus('pictures_downloaded')}
             disabled={job.status === 'pictures_downloaded'}
           >
@@ -267,11 +406,17 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       </section>
 
       <section className="card section">
-        <h2>Discrepancy</h2>
+        <div className="card-header">
+          <h2>
+            <IconAlertTriangle /> Discrepancy
+          </h2>
+        </div>
         {job.isDiscrepancy ? (
           <div>
             <p>
-              <span className="badge badge-warning">Flagged</span>{' '}
+              <span className="badge badge-warning">
+                <IconAlertTriangle /> Flagged
+              </span>{' '}
               {reasons.find((r) => r.id === job.discrepancyReasonId)?.label ?? job.discrepancyReasonId}
             </p>
             {job.discrepancyNotes && <p className="muted">Notes: {job.discrepancyNotes}</p>}
@@ -299,15 +444,21 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               value={discrepancyNotes}
               onChange={(e) => setDiscrepancyNotes(e.target.value)}
             />
-            <button onClick={handleFlagDiscrepancy}>Flag Discrepancy</button>
+            <button onClick={handleFlagDiscrepancy}>
+              <IconTag /> Flag Discrepancy
+            </button>
           </div>
         )}
       </section>
 
       <section className="card section">
-        <h2>Photos ({job.photos.length})</h2>
+        <div className="card-header">
+          <h2>
+            <IconImage /> Photos <span className="muted" style={{ fontWeight: 500 }}>({job.photos.length})</span>
+          </h2>
+        </div>
         {job.photos.length === 0 ? (
-          <p className="empty-state">No photos uploaded.</p>
+          <EmptyState icon={<IconImage />} title="No photos uploaded" subtitle="Photos submitted from the field will appear here." />
         ) : (
           <div className="photo-grid">
             {job.photos.map((photo) =>
@@ -318,6 +469,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Open full-size photo for job ${job.jobNumber}`}
+                  className="photo-thumb-wrap"
                 >
                   <img src={photo.downloadUrl} alt={`Photo uploaded for job ${job.jobNumber}`} className="photo-thumb" />
                 </a>
@@ -332,9 +484,13 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       </section>
 
       <section className="card section">
-        <h2>Audit Log</h2>
+        <div className="card-header">
+          <h2>
+            <IconHistory /> Audit log
+          </h2>
+        </div>
         {auditLog.length === 0 ? (
-          <p className="empty-state">No audit history yet.</p>
+          <EmptyState icon={<IconHistory />} title="No audit history yet" subtitle="Edits and status changes to this record will be logged here." />
         ) : (
           <div className="table-wrap">
             <table>
