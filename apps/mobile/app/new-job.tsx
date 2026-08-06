@@ -324,6 +324,7 @@ export default function NewJob() {
                     onPress={() => setWorkCodeId(wc.id)}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
+                    accessibilityLabel={wc.description ? `${wc.code}: ${wc.description}` : wc.code}
                     style={[styles.chip, selected && styles.chipSelected]}
                   >
                     {selected && <Text style={styles.chipCheck}>✓ </Text>}
@@ -332,6 +333,7 @@ export default function NewJob() {
                 );
               })}
             </View>
+            {selectedWorkCode?.description && <Text style={styles.muted}>{selectedWorkCode.description}</Text>}
           </View>
 
           <TextField
