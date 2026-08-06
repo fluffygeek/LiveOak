@@ -5,6 +5,7 @@ import type { SubmittedJob } from '../src/lib/types';
 import { Button } from '../src/components/Button';
 import { Badge } from '../src/components/Badge';
 import { EmptyState } from '../src/components/EmptyState';
+import { Banner } from '../src/components/Banner';
 import { colors, spacing } from '../src/theme';
 
 /**
@@ -49,7 +50,8 @@ export default function Weekly() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.loadingLabel}>Loading your submissions…</Text>
       </View>
     );
   }
@@ -59,7 +61,7 @@ export default function Weekly() {
       <Text style={styles.subtitle}>This week's submissions — resets Sunday midnight Eastern.</Text>
       {loadError ? (
         <View style={[styles.center, { gap: spacing.md, marginTop: spacing.xl }]}>
-          <Text style={styles.muted}>Could not load your submissions. Check your connection and try again.</Text>
+          <Banner tone="danger" message="Could not load your submissions. Check your connection and try again." />
           <Button title="Retry" onPress={load} variant="secondary" />
         </View>
       ) : (
@@ -79,14 +81,20 @@ export default function Weekly() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <View style={styles.row}>
-              <Text style={styles.jobNumber}>{item.jobNumber}</Text>
+              <View style={styles.rowHeader}>
+                <Text style={styles.jobNumber}>{item.jobNumber}</Text>
+                {item.isDiscrepancy ? (
+                  <Badge label="Discrepancy" variant="warning" />
+                ) : (
+                  <Badge label="Submitted" variant="success" />
+                )}
+              </View>
               <Text style={styles.address}>
                 {item.addressLine1}, {item.city} {item.zip}
               </Text>
               <Text style={styles.muted}>
                 {new Date(item.submittedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET
               </Text>
-              {item.isDiscrepancy && <Badge label="Discrepancy" variant="warning" />}
             </View>
           )}
         />
@@ -105,6 +113,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.md,
+  },
+  loadingLabel: {
+    color: colors.textMuted,
+    fontSize: 15,
   },
   subtitle: {
     marginBottom: spacing.md,
@@ -121,8 +134,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: spacing.xs,
   },
+  rowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   jobNumber: {
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
     color: colors.text,
   },
   address: {

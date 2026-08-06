@@ -13,6 +13,8 @@ export const colors = {
   successBg: '#ecfdf3',
   warning: '#b45309',
   warningBg: '#fffaeb',
+  info: '#2952cc',
+  infoBg: '#eef2fd',
 } as const;
 
 export const spacing = {
@@ -25,3 +27,6 @@ export const spacing = {
 } as const;
 
 export const radius = 8;
+
+/** iOS HIG / Material minimum recommended touch target — every Pressable/input should hit this. */
+export const minTouchTarget = 44;
