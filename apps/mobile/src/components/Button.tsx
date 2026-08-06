@@ -97,7 +97,7 @@ const variantStyles = StyleSheet.create({
   },
   secondary: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
   },
   danger: {
     backgroundColor: colors.danger,

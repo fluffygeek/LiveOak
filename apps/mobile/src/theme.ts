@@ -3,6 +3,10 @@ export const colors = {
   bg: '#f7f8fa',
   surface: '#ffffff',
   border: '#e2e5ea',
+  // Meets ~3:1 against both bg and surface (WCAG 1.4.11 non-text contrast) — use this,
+  // not `border`, for any edge that's the only cue a control exists (chip/input/card
+  // outlines), so boundaries stay visible in bright outdoor light.
+  borderStrong: '#8a93a3',
   text: '#1a1d23',
   textMuted: '#667085',
   primary: '#2952cc',

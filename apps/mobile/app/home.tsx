@@ -7,6 +7,7 @@ import type { JobDraft } from '../src/lib/types';
 import { Button } from '../src/components/Button';
 import { Card } from '../src/components/Card';
 import { Banner } from '../src/components/Banner';
+import { HeaderButton } from '../src/components/HeaderButton';
 import { colors, spacing } from '../src/theme';
 
 /**
@@ -33,9 +34,7 @@ export default function Home() {
 
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <Button title="Sign Out" onPress={confirmSignOut} variant="ghost" size="compact" />
-      ),
+      headerRight: () => <HeaderButton title="Sign Out" onPress={confirmSignOut} />,
     });
   }, [navigation]);
 

@@ -12,9 +12,9 @@ export function EmptyState({ label, icon = '📋' }: { label: string; icon?: str
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
     borderRadius: radius,
     padding: spacing.xl,
     alignItems: 'center',

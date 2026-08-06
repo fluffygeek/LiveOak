@@ -95,6 +95,9 @@ export default function Weekly() {
               <Text style={styles.muted}>
                 {new Date(item.submittedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET
               </Text>
+              {item.isDiscrepancy && (
+                <Text style={styles.discrepancyHint}>Flagged for payroll review — no action needed from you.</Text>
+              )}
             </View>
           )}
         />
@@ -147,5 +150,10 @@ const styles = StyleSheet.create({
   },
   address: {
     color: colors.text,
+  },
+  discrepancyHint: {
+    color: colors.warning,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

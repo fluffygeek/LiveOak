@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useNavigation } from 'expo-router';
 import { useApiClient } from '../src/lib/api-client';
@@ -7,6 +7,8 @@ import type { JobDraft, JobDraftPhoto, WorkCode } from '../src/lib/types';
 import { Button } from '../src/components/Button';
 import { TextField } from '../src/components/TextField';
 import { Banner } from '../src/components/Banner';
+import { Card } from '../src/components/Card';
+import { HeaderButton } from '../src/components/HeaderButton';
 import { colors, minTouchTarget, radius, spacing } from '../src/theme';
 
 export default function NewJob() {
@@ -250,9 +252,7 @@ export default function NewJob() {
 
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <Button title="Discard" onPress={handleDiscard} variant="ghost" size="compact" loading={discarding} />
-      ),
+      headerRight: () => <HeaderButton title="Discard" onPress={handleDiscard} tone="danger" loading={discarding} />,
     });
   }, [navigation, handleDiscard, discarding]);
 
@@ -280,7 +280,8 @@ export default function NewJob() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <Text style={styles.muted}>Loading job…</Text>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.loadingLabel}>Loading job…</Text>
       </View>
     );
   }
@@ -309,73 +310,70 @@ export default function NewJob() {
 
         <ChecklistSummary addressVerified={addressVerified} photosComplete={photosComplete} photosLabel={`${photos.length}/${requiredPhotoCount}`} />
 
-        <TextField label="Job ID" value={jobNumber} onChangeText={setJobNumber} placeholder="Job number" />
+        <Card style={styles.section}>
+          <TextField label="Job ID" value={jobNumber} onChangeText={setJobNumber} placeholder="Job number" />
 
-        <View>
-          <Text style={styles.sectionLabel}>Work Code</Text>
-          <View style={styles.chipRow}>
-            {workCodes.map((wc) => {
-              const selected = wc.id === workCodeId;
-              return (
-                <Pressable
-                  key={wc.id}
-                  onPress={() => setWorkCodeId(wc.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  {selected && <Text style={styles.chipCheck}>✓ </Text>}
-                  <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{wc.code}</Text>
-                </Pressable>
-              );
-            })}
+          <View>
+            <Text style={styles.sectionLabel}>Work Code</Text>
+            <View style={styles.chipRow}>
+              {workCodes.map((wc) => {
+                const selected = wc.id === workCodeId;
+                return (
+                  <Pressable
+                    key={wc.id}
+                    onPress={() => setWorkCodeId(wc.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[styles.chip, selected && styles.chipSelected]}
+                  >
+                    {selected && <Text style={styles.chipCheck}>✓ </Text>}
+                    <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{wc.code}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-          {selectedWorkCode && (
-            <Text style={styles.muted}>
-              {photos.length} of {selectedWorkCode.requiredPhotoCount} photos required
-            </Text>
-          )}
-        </View>
 
-        <TextField
-          label="Footage"
-          value={footage}
-          onChangeText={(v) => {
-            setFootage(v);
-            if (footageError) setFootageError(null);
-          }}
-          keyboardType="numeric"
-          error={footageError}
-        />
+          <TextField
+            label="Footage"
+            value={footage}
+            onChangeText={(v) => {
+              setFootage(v);
+              if (footageError) setFootageError(null);
+            }}
+            keyboardType="numeric"
+            error={footageError}
+          />
 
-        <View style={styles.row}>
-          <Text style={styles.sectionLabel}>New build (skip USPS verification)</Text>
-          <Switch value={isNewBuild} onValueChange={setIsNewBuild} trackColor={{ true: colors.primary }} />
-        </View>
+          <View style={styles.row}>
+            <Text style={styles.sectionLabel}>New build (skip USPS verification)</Text>
+            <Switch value={isNewBuild} onValueChange={setIsNewBuild} trackColor={{ true: colors.primary }} />
+          </View>
 
-        <View style={styles.addressGroup}>
+          <TextField label="Notes" value={notes} onChangeText={setNotes} style={styles.notesInput} multiline />
+
+          <Button title="Save Draft" onPress={saveDraft} loading={saving} variant="secondary" />
+        </Card>
+
+        <Card style={styles.section}>
           <Text style={styles.sectionLabel}>Address</Text>
           <TextField label="Line 1" value={addressLine1} onChangeText={setAddressLine1} required />
           <TextField label="Line 2 (optional)" value={addressLine2} onChangeText={setAddressLine2} />
           <TextField label="City" value={city} onChangeText={setCity} required />
           <TextField label="State" value={state} onChangeText={setState} maxLength={2} required />
           <TextField label="ZIP" value={zip} onChangeText={setZip} keyboardType="numeric" required />
-        </View>
 
-        <Button
-          title={verifying ? 'Verifying…' : 'Verify Address'}
-          onPress={handleVerifyAddress}
-          loading={verifying}
-          variant="secondary"
-        />
-        <AddressVerificationStatus draft={draft} />
+          <Button
+            title={verifying ? 'Verifying…' : 'Verify Address'}
+            onPress={handleVerifyAddress}
+            loading={verifying}
+            variant="secondary"
+          />
+          <AddressVerificationStatus draft={draft} />
+        </Card>
 
-        <TextField label="Notes" value={notes} onChangeText={setNotes} style={styles.notesInput} multiline />
-
-        <Button title="Save Draft" onPress={saveDraft} loading={saving} variant="secondary" />
-
-        <View>
-          <Text style={styles.sectionLabel}>Photos ({photos.length} of {requiredPhotoCount})</Text>
+        <Card style={styles.section}>
+          <Text style={styles.sectionLabel}>Photos ({photos.length} of {requiredPhotoCount} required)</Text>
           <View style={styles.chipRow}>
             {photos.map((p) =>
               photoPreviews[p.id] ? (
@@ -402,7 +400,7 @@ export default function NewJob() {
               {photosRemaining} more photo{photosRemaining === 1 ? '' : 's'} required before you can submit.
             </Text>
           )}
-        </View>
+        </Card>
       </ScrollView>
 
       <View style={styles.footer}>
@@ -485,6 +483,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
+    gap: spacing.md,
+  },
+  loadingLabel: {
+    color: colors.textMuted,
+    fontSize: 15,
   },
   muted: {
     color: colors.textMuted,
@@ -505,8 +508,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: minTouchTarget,
   },
-  addressGroup: {
-    gap: spacing.sm,
+  section: {
+    gap: spacing.md,
   },
   notesInput: {
     height: 80,
@@ -527,8 +530,8 @@ const styles = StyleSheet.create({
     minHeight: minTouchTarget,
     minWidth: minTouchTarget,
     borderRadius: radius,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   chipSelected: {

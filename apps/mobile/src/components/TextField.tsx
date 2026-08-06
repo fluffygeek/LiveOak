@@ -39,8 +39,8 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
     borderRadius: radius,
     padding: spacing.md,
     fontSize: 16,
