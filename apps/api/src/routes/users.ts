@@ -19,6 +19,10 @@ const updateUserBody = z.object({
 
 const UNIQUE_VIOLATION = '23505';
 
+// Guards against a malformed :id reaching `eq(users.id, id)` and failing
+// with a raw Postgres error (reported as an opaque 500) instead of a 400.
+const userIdParams = z.object({ id: z.string().uuid() });
+
 /**
  * App-admin-only user provisioning. There is no self-registration path —
  * a Gmail address must be added here (with a role) before that person can
@@ -57,6 +61,7 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   app.patch<{ Params: { id: string } }>('/users/:id', { preHandler: guards }, async (request, reply) => {
+    const { id } = userIdParams.parse(request.params);
     const body = updateUserBody.parse(request.body);
     if (Object.keys(body).length === 0) {
       return reply.code(400).send({ error: 'no_fields_to_update' });
@@ -67,7 +72,7 @@ export async function userRoutes(app: FastifyInstance) {
     // requests demoting two different admins can't both observe "one
     // other admin remains" and both commit, leaving zero active app_admins.
     const result = await app.db.transaction(async (tx) => {
-      const [target] = await tx.select().from(users).where(eq(users.id, request.params.id)).for('update');
+      const [target] = await tx.select().from(users).where(eq(users.id, id)).for('update');
       if (!target) {
         return { status: 404 as const, body: { error: 'user_not_found' } };
       }
@@ -88,7 +93,7 @@ export async function userRoutes(app: FastifyInstance) {
         }
       }
 
-      const [updated] = await tx.update(users).set(body).where(eq(users.id, request.params.id)).returning();
+      const [updated] = await tx.update(users).set(body).where(eq(users.id, id)).returning();
       return { status: 200 as const, body: updated };
     });
 

@@ -68,6 +68,11 @@ const discrepancyBody = z.object({
   discrepancyNotes: z.string().optional(),
 });
 
+// Without this, a malformed :id (not a UUID) reaches `eq(jobs.id, id)` and
+// fails with a raw Postgres 22P02 error — indistinguishable from a real
+// server error to the global handler, so it becomes a 500 instead of a 400.
+const jobIdParams = z.object({ id: z.string().uuid() });
+
 /**
  * Payroll admin (and app_admin, via the requireRole superset) record
  * management: list/filter/search, view, edit any field, mark
@@ -107,7 +112,8 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/jobs/:id', { preHandler: guards }, async (request, reply) => {
-    const [job] = await app.db.select().from(jobs).where(eq(jobs.id, request.params.id));
+    const { id } = jobIdParams.parse(request.params);
+    const [job] = await app.db.select().from(jobs).where(eq(jobs.id, id));
     if (!job) {
       return reply.code(404).send({ error: 'job_not_found' });
     }
@@ -125,6 +131,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.patch<{ Params: { id: string } }>('/jobs/:id', { preHandler: guards }, async (request, reply) => {
+    const { id } = jobIdParams.parse(request.params);
     const body = jobPatchBody.parse(request.body);
     if (Object.keys(body).length === 0) {
       return reply.code(400).send({ error: 'no_fields_to_update' });
@@ -136,7 +143,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
     }
 
     const updated = await app.db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, id)).for('update');
       if (!existing) return null;
 
       const [row] = await tx
@@ -165,10 +172,11 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>('/jobs/:id/status', { preHandler: guards }, async (request, reply) => {
+    const { id } = jobIdParams.parse(request.params);
     const body = statusBody.parse(request.body);
 
     const updated = await app.db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, id)).for('update');
       if (!existing) return null;
 
       const [row] = await tx
@@ -198,6 +206,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>('/jobs/:id/discrepancy', { preHandler: guards }, async (request, reply) => {
+    const { id } = jobIdParams.parse(request.params);
     const body = discrepancyBody.parse(request.body);
     const [reason] = await app.db
       .select()
@@ -208,7 +217,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
     }
 
     const updated = await app.db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, id)).for('update');
       if (!existing) return null;
 
       const [row] = await tx
@@ -243,8 +252,9 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.delete<{ Params: { id: string } }>('/jobs/:id/discrepancy', { preHandler: guards }, async (request, reply) => {
+    const { id } = jobIdParams.parse(request.params);
     const updated = await app.db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, request.params.id)).for('update');
+      const [existing] = await tx.select().from(jobs).where(eq(jobs.id, id)).for('update');
       if (!existing) return null;
 
       const [row] = await tx
@@ -274,6 +284,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/jobs/:id/audit-log', { preHandler: guards }, async (request, reply) => {
+    const { id } = jobIdParams.parse(request.params);
     const rows = await app.db
       .select({
         id: auditLog.id,
@@ -289,7 +300,7 @@ export async function payrollJobRoutes(app: FastifyInstance) {
       })
       .from(auditLog)
       .leftJoin(users, eq(auditLog.actorId, users.id))
-      .where(eq(auditLog.jobId, request.params.id))
+      .where(eq(auditLog.jobId, id))
       .orderBy(desc(auditLog.occurredAt));
 
     return reply.send(rows);

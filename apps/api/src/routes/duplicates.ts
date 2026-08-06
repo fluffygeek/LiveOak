@@ -9,6 +9,11 @@ const resolveBody = z.object({
   jobIds: z.array(z.string().uuid()).min(1),
 });
 
+// Guards against a malformed :groupId reaching a uuid-column query and
+// failing with a raw Postgres error (reported as an opaque 500) instead of
+// a 400.
+const groupIdParams = z.object({ groupId: z.string().uuid() });
+
 /**
  * Payroll admin (+ app_admin) duplicate review queue: groups produced by the
  * worker's nightly reconciliation job (apps/worker/src/jobs/reconcileDuplicates.ts).
@@ -41,8 +46,8 @@ export async function duplicateRoutes(app: FastifyInstance) {
     '/jobs/duplicates/:groupId/resolve',
     { preHandler: guards },
     async (request, reply) => {
+      const { groupId } = groupIdParams.parse(request.params);
       const body = resolveBody.parse(request.body);
-      const groupId = request.params.groupId;
 
       const updated = await app.db.transaction(async (tx) => {
         const members = await tx

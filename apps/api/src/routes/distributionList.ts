@@ -11,6 +11,10 @@ const createBody = z.object({
 
 const UNIQUE_VIOLATION = '23505';
 
+// Guards against a malformed :id reaching a uuid-column query and failing
+// with a raw Postgres error (reported as an opaque 500) instead of a 400.
+const idParams = z.object({ id: z.string().uuid() });
+
 /** App-admin-only: recipients of the nightly discrepancy digest email. */
 export async function distributionListRoutes(app: FastifyInstance) {
   const guards = [authenticate, requireActiveUser, requireRole(['app_admin'])];
@@ -33,9 +37,10 @@ export async function distributionListRoutes(app: FastifyInstance) {
   });
 
   app.delete<{ Params: { id: string } }>('/distribution-list/:id', { preHandler: guards }, async (request, reply) => {
+    const { id } = idParams.parse(request.params);
     const [deleted] = await app.db
       .delete(distributionList)
-      .where(eq(distributionList.id, request.params.id))
+      .where(eq(distributionList.id, id))
       .returning();
     if (!deleted) {
       return reply.code(404).send({ error: 'recipient_not_found' });
