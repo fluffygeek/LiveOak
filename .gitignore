@@ -13,3 +13,8 @@ coverage/
 .DS_Store
 npm-debug.log*
 pnpm-debug.log*
+
+# Local agent tooling (installed skills, agent-tool config) — not project code
+.agents/
+.claude/
+skills-lock.json
