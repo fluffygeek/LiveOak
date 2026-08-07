@@ -25,6 +25,7 @@ export function HeaderButton({
       disabled={loading}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ busy: loading }}
       style={styles.button}
     >

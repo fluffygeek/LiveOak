@@ -26,6 +26,7 @@ export function Button({ title, onPress, variant = 'primary', size = 'default', 
         disabled={isDisabled}
         hitSlop={size === 'compact' ? { top: 8, bottom: 8, left: 8, right: 8 } : undefined}
         accessibilityRole="button"
+        accessibilityLabel={title}
         accessibilityState={{ disabled: isDisabled, busy: loading }}
         style={({ pressed }) => [
           styles.base,

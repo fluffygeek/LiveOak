@@ -191,7 +191,10 @@ export default function RecordsPage() {
             maxLength={2}
             className="input-narrow"
             value={filters.state}
-            onChange={(e) => setFilters((f) => ({ ...f, state: e.target.value }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, state: e.target.value }));
+              setPage(1);
+            }}
           />
         </div>
         <div className="field">
@@ -199,7 +202,10 @@ export default function RecordsPage() {
           <select
             id="filter-status"
             value={filters.status}
-            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as JobStatus | '' }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, status: e.target.value as JobStatus | '' }));
+              setPage(1);
+            }}
           >
             <option value="">Any status</option>
             <option value="submitted">Submitted</option>
@@ -212,7 +218,10 @@ export default function RecordsPage() {
           <select
             id="filter-work-code"
             value={filters.workCodeId}
-            onChange={(e) => setFilters((f) => ({ ...f, workCodeId: e.target.value }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, workCodeId: e.target.value }));
+              setPage(1);
+            }}
           >
             <option value="">Any work code</option>
             {workCodes.map((wc) => (
@@ -228,7 +237,10 @@ export default function RecordsPage() {
             id="filter-from"
             type="date"
             value={filters.submittedFrom}
-            onChange={(e) => setFilters((f) => ({ ...f, submittedFrom: e.target.value }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, submittedFrom: e.target.value }));
+              setPage(1);
+            }}
           />
         </div>
         <div className="field">
@@ -237,14 +249,20 @@ export default function RecordsPage() {
             id="filter-to"
             type="date"
             value={filters.submittedTo}
-            onChange={(e) => setFilters((f) => ({ ...f, submittedTo: e.target.value }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, submittedTo: e.target.value }));
+              setPage(1);
+            }}
           />
         </div>
         <label className="checkbox">
           <input
             type="checkbox"
             checked={filters.isDiscrepancy}
-            onChange={(e) => setFilters((f) => ({ ...f, isDiscrepancy: e.target.checked }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, isDiscrepancy: e.target.checked }));
+              setPage(1);
+            }}
           />
           Discrepancy only
         </label>
@@ -252,7 +270,10 @@ export default function RecordsPage() {
           <input
             type="checkbox"
             checked={filters.isDuplicate}
-            onChange={(e) => setFilters((f) => ({ ...f, isDuplicate: e.target.checked }))}
+            onChange={(e) => {
+              setFilters((f) => ({ ...f, isDuplicate: e.target.checked }));
+              setPage(1);
+            }}
           />
           Duplicates only
         </label>

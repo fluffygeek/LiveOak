@@ -167,7 +167,7 @@ export default function UsersPage() {
 
       {loading ? (
         <SkeletonTable columns={5} rows={5} />
-      ) : error ? null : items.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={<IconUsers />} title="No users yet" subtitle="Add technicians and admins by their Gmail address." />
       ) : (
         <div className="table-wrap">

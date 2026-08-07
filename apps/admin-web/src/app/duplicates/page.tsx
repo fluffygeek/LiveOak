@@ -162,6 +162,7 @@ export default function DuplicatesPage() {
                       <td>
                         <button
                           className="btn-secondary btn-sm"
+                          aria-label={`Mark job ${job.jobNumber} as not a duplicate`}
                           onClick={() => handleUnlink(group.duplicateGroupId, job.id)}
                           disabled={resolvingGroupId === group.duplicateGroupId}
                         >

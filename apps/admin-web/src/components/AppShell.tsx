@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../lib/auth-context';
+import { humanize } from '../lib/format';
 import { IconClipboardList, IconCopy, IconLogOut, IconSettings } from './icons';
 
 interface NavItem {
@@ -67,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="avatar">{initials(user.email)}</span>
                 <div className="app-user-text">
                   <span className="app-user-email">{user.email}</span>
-                  <span className="role-badge">{user.role.replace('_', ' ')}</span>
+                  <span className="role-badge">{humanize(user.role)}</span>
                 </div>
               </div>
               <button

@@ -149,7 +149,7 @@ export default function DistributionListPage() {
 
       {loading ? (
         <SkeletonTable columns={4} rows={4} />
-      ) : error ? null : items.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={<IconMail />} title="No digest recipients yet" subtitle="Add the first recipient of the nightly discrepancy digest." />
       ) : (
         <div className="table-wrap">

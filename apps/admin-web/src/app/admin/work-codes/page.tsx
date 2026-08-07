@@ -166,7 +166,7 @@ export default function WorkCodesPage() {
 
       {loading ? (
         <SkeletonTable columns={5} rows={5} />
-      ) : error ? null : items.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={<IconClipboardList />} title="No work codes yet" subtitle="Add the first code technicians will select when submitting a job." />
       ) : (
         <div className="table-wrap">

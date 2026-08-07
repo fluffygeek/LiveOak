@@ -123,7 +123,9 @@ export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promis
       });
     } catch (err) {
       failureCount += 1;
-      logger.error({ err, recipient: recipient.email }, 'sendDiscrepancyDigest: failed to send to recipient');
+      // recipient.id, not .email — the email address is PII and shouldn't
+      // flow into logs/Sentry; the id is enough to look the recipient up.
+      logger.error({ err, recipientId: recipient.id }, 'sendDiscrepancyDigest: failed to send to recipient');
       captureException(err);
     }
   }

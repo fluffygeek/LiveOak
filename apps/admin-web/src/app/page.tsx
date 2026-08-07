@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../lib/auth-context';
 import { useApiClient } from '../lib/api-client';
+import { humanize } from '../lib/format';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 import { StatCard } from '../components/StatCard';
 import { SkeletonStatGrid } from '../components/Skeleton';
 import { IconAlertTriangle, IconClipboardList, IconCopy, IconSettings } from '../components/icons';
 
 interface DashboardCounts {
-  total: number;
-  discrepancies: number;
-  duplicates: number;
+  total: number | null;
+  discrepancies: number | null;
+  duplicates: number | null;
 }
 
 export default function HomePage() {
@@ -37,16 +38,19 @@ export default function HomePage() {
           apiFetch('/jobs?page=1&perPage=1&isDiscrepancy=true'),
           apiFetch('/jobs?page=1&perPage=1&isDuplicate=true'),
         ]);
+        // A non-OK response stays `null` (rendered as "—") rather than being
+        // folded into 0 — a failed count is not the same thing as a verified
+        // empty count, and showing 0 for the former would be misleading.
         const [totalBody, discBody, dupBody] = await Promise.all([
-          totalRes.ok ? totalRes.json() : { total: 0 },
-          discRes.ok ? discRes.json() : { total: 0 },
-          dupRes.ok ? dupRes.json() : { total: 0 },
+          totalRes.ok ? totalRes.json() : null,
+          discRes.ok ? discRes.json() : null,
+          dupRes.ok ? dupRes.json() : null,
         ]);
         if (!cancelled) {
           setCounts({
-            total: totalBody.total ?? 0,
-            discrepancies: discBody.total ?? 0,
-            duplicates: dupBody.total ?? 0,
+            total: totalRes.ok ? (totalBody.total ?? 0) : null,
+            discrepancies: discRes.ok ? (discBody.total ?? 0) : null,
+            duplicates: dupRes.ok ? (dupBody.total ?? 0) : null,
           });
         }
       } catch {
@@ -83,7 +87,7 @@ export default function HomePage() {
         <div>
           <h1>Welcome back</h1>
           <p className="page-subtitle">
-            Signed in as {user.email} <span className="role-badge">{user.role.replace('_', ' ')}</span>
+            Signed in as {user.email} <span className="role-badge">{humanize(user.role)}</span>
           </p>
         </div>
       </div>
@@ -102,21 +106,21 @@ export default function HomePage() {
             <div className="stat-grid">
               <StatCard
                 label="Total records"
-                value={counts ? counts.total.toLocaleString() : '—'}
+                value={counts?.total != null ? counts.total.toLocaleString() : '—'}
                 sub="All submitted jobs"
                 icon={<IconClipboardList />}
                 tone="primary"
               />
               <StatCard
                 label="Discrepancies"
-                value={counts ? counts.discrepancies.toLocaleString() : '—'}
+                value={counts?.discrepancies != null ? counts.discrepancies.toLocaleString() : '—'}
                 sub="Flagged for payroll review"
                 icon={<IconAlertTriangle />}
                 tone="warning"
               />
               <StatCard
                 label="Duplicates"
-                value={counts ? counts.duplicates.toLocaleString() : '—'}
+                value={counts?.duplicates != null ? counts.duplicates.toLocaleString() : '—'}
                 sub="Awaiting reconciliation"
                 icon={<IconCopy />}
                 tone="info"

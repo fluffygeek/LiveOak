@@ -119,7 +119,7 @@ export default function AppConfigPage() {
 
       {loading ? (
         <SkeletonTable columns={4} rows={4} />
-      ) : error ? null : items.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={<IconSliders />} title="No config entries yet" subtitle="Singleton app settings will appear here once seeded." />
       ) : (
         <div className="table-wrap">

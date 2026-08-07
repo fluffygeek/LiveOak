@@ -143,7 +143,7 @@ export default function DiscrepancyReasonsPage() {
 
       {loading ? (
         <SkeletonTable columns={4} rows={5} />
-      ) : error ? null : items.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState icon={<IconTag />} title="No discrepancy reasons yet" subtitle="Add the reasons payroll admins will choose from when flagging a job." />
       ) : (
         <div className="table-wrap">

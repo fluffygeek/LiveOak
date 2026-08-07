@@ -7,9 +7,13 @@ const JOB_STATUS_META: Record<JobStatus, { label: string; className: string; ico
   closed: { label: 'Closed', className: 'badge-success', icon: <IconCheckCircle /> },
 };
 
+const UNKNOWN_META = { label: 'Unknown', className: 'badge-neutral', icon: null as React.ReactNode };
+
 /** Renders a job's lifecycle status as a colored pill with an icon. */
 export function JobStatusBadge({ status }: { status: JobStatus }) {
-  const meta = JOB_STATUS_META[status];
+  // Falls back rather than throwing — `status` is a runtime value from the
+  // API, not statically guaranteed to be a member of the JobStatus union.
+  const meta = JOB_STATUS_META[status] ?? UNKNOWN_META;
   return (
     <span className={`badge ${meta.className}`}>
       {meta.icon}
@@ -50,7 +54,7 @@ const VERIFICATION_META: Record<AddressVerificationStatus, { label: string; clas
 };
 
 export function AddressVerificationBadge({ status }: { status: AddressVerificationStatus }) {
-  const meta = VERIFICATION_META[status];
+  const meta = VERIFICATION_META[status] ?? UNKNOWN_META;
   return (
     <span className={`badge ${meta.className}`}>
       {meta.icon}

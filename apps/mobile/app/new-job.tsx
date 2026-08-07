@@ -22,6 +22,15 @@ export default function NewJob() {
   // Photos loaded from a resumed draft have no download endpoint, so they
   // fall back to a placeholder tile.
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>({});
+  // Set when a photo uploaded to storage successfully but the /confirm call
+  // then failed or timed out — the object already exists in storage (and
+  // may already be confirmed server-side if only the response was lost), so
+  // retrying must reuse this key rather than launching a whole new capture,
+  // which would upload a second object and could double-count toward the
+  // required photo count.
+  const [pendingConfirm, setPendingConfirm] = useState<{ key: string; contentType: string; previewUri: string } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -49,9 +58,11 @@ export default function NewJob() {
   const photosRemaining = Math.max(requiredPhotoCount - photos.length, 0);
 
   const loadDraftAndPhotos = useCallback(
-    async (draftId: string) => {
+    async (draftId: string): Promise<boolean> => {
       const res = await apiFetch(`/jobs/draft/${draftId}/photos`);
-      if (res.ok) setPhotos(await res.json());
+      if (!res.ok) return false;
+      setPhotos(await res.json());
+      return true;
     },
     [apiFetch],
   );
@@ -64,24 +75,32 @@ export default function NewJob() {
         apiFetch('/jobs/draft', { method: 'POST' }),
         apiFetch('/work-codes'),
       ]);
-      if (draftRes.ok) {
-        const d: JobDraft = await draftRes.json();
-        setDraft(d);
-        setJobNumber(d.jobNumber ?? '');
-        setWorkCodeId(d.workCodeId);
-        setFootage(d.footage ?? '');
-        setNotes(d.notes ?? '');
-        setIsNewBuild(d.isNewBuild);
-        setAddressLine1(d.addressLine1 ?? '');
-        setAddressLine2(d.addressLine2 ?? '');
-        setCity(d.city ?? '');
-        setState(d.state ?? '');
-        setZip(d.zip ?? '');
-        await loadDraftAndPhotos(d.id);
-      } else {
+      // All three requests are required for the form to be usable (work
+      // codes drive the photo-count requirement, photos drive the submit
+      // gate) — a partial failure here must fail the whole load rather than
+      // rendering a form with silently-missing data.
+      if (!draftRes.ok || !workCodesRes.ok) {
         setLoadError(true);
+        return;
       }
-      if (workCodesRes.ok) setWorkCodes(await workCodesRes.json());
+      const d: JobDraft = await draftRes.json();
+      const photosLoaded = await loadDraftAndPhotos(d.id);
+      if (!photosLoaded) {
+        setLoadError(true);
+        return;
+      }
+      setDraft(d);
+      setJobNumber(d.jobNumber ?? '');
+      setWorkCodeId(d.workCodeId);
+      setFootage(d.footage ?? '');
+      setNotes(d.notes ?? '');
+      setIsNewBuild(d.isNewBuild);
+      setAddressLine1(d.addressLine1 ?? '');
+      setAddressLine2(d.addressLine2 ?? '');
+      setCity(d.city ?? '');
+      setState(d.state ?? '');
+      setZip(d.zip ?? '');
+      setWorkCodes(await workCodesRes.json());
     } catch {
       setLoadError(true);
     } finally {
@@ -170,8 +189,44 @@ export default function NewJob() {
     }
   }
 
+  // Confirms an object already uploaded to storage. The API's /confirm
+  // endpoint is idempotent on `key`, so calling this again for a key that
+  // actually succeeded server-side last time just returns the existing row
+  // instead of creating a duplicate.
+  async function confirmPhoto(draftId: string, key: string, contentType: string, previewUri: string): Promise<boolean> {
+    const confirmRes = await apiFetch(`/jobs/draft/${draftId}/photos/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, contentType }),
+    });
+    if (!confirmRes.ok) {
+      setPendingConfirm({ key, contentType, previewUri });
+      setError('Photo uploaded but could not be confirmed. Tap Add Photo again to retry.');
+      return false;
+    }
+    const confirmed: JobDraftPhoto = await confirmRes.json();
+    setPendingConfirm(null);
+    setPhotos((prev) => (prev.some((p) => p.id === confirmed.id) ? prev : [...prev, confirmed]));
+    setPhotoPreviews((prev) => ({ ...prev, [confirmed.id]: previewUri }));
+    return true;
+  }
+
   async function handleAddPhoto() {
     if (!draft) return;
+
+    if (pendingConfirm) {
+      setUploading(true);
+      setError(null);
+      try {
+        await confirmPhoto(draft.id, pendingConfirm.key, pendingConfirm.contentType, pendingConfirm.previewUri);
+      } catch {
+        setError('Could not reach the server. Check your connection and try again.');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Camera permission required', 'Enable camera access to attach job photos.');
@@ -204,18 +259,7 @@ export default function NewJob() {
         return;
       }
 
-      const confirmRes = await apiFetch(`/jobs/draft/${draft.id}/photos/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, contentType }),
-      });
-      if (confirmRes.ok) {
-        const confirmed: JobDraftPhoto = await confirmRes.json();
-        setPhotos((prev) => [...prev, confirmed]);
-        setPhotoPreviews((prev) => ({ ...prev, [confirmed.id]: asset.uri }));
-      } else {
-        setError('Photo uploaded but could not be confirmed. Try adding it again.');
-      }
+      await confirmPhoto(draft.id, key, contentType, asset.uri);
     } catch {
       setError('Photo upload failed. Check your connection and try again.');
     } finally {
@@ -259,6 +303,22 @@ export default function NewJob() {
   async function handleSubmit() {
     const saved = await saveDraft();
     if (!saved) return;
+    // Re-derive from the just-saved draft, not the pre-save `addressVerified`/
+    // `photosComplete` closure values below — editing the address resets
+    // verification server-side (see PATCH /jobs/draft/:id), so a save that
+    // touched the address can flip `saved` back to unsubmittable even though
+    // the render this closure came from still showed it as verified.
+    const savedAddressVerified = ['verified', 'skipped_new_build', 'unavailable'].includes(
+      saved.addressVerificationStatus,
+    );
+    if (!savedAddressVerified) {
+      setError('The address changed and needs to be verified again before this job can be submitted.');
+      return;
+    }
+    if (photos.length < requiredPhotoCount) {
+      setError(`Add ${requiredPhotoCount - photos.length} more photo${requiredPhotoCount - photos.length === 1 ? '' : 's'} before submitting.`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -390,11 +450,11 @@ export default function NewJob() {
               onPress={handleAddPhoto}
               disabled={uploading}
               accessibilityRole="button"
-              accessibilityLabel="Add photo"
+              accessibilityLabel={pendingConfirm ? 'Retry confirming photo' : 'Add photo'}
               style={[styles.photoAddTile, uploading && styles.disabled]}
             >
-              <Text style={styles.photoAddIcon}>{uploading ? '…' : '＋'}</Text>
-              <Text style={styles.photoAddLabel}>{uploading ? 'Uploading' : 'Add Photo'}</Text>
+              <Text style={styles.photoAddIcon}>{uploading ? '…' : pendingConfirm ? '↻' : '＋'}</Text>
+              <Text style={styles.photoAddLabel}>{uploading ? 'Uploading' : pendingConfirm ? 'Retry' : 'Add Photo'}</Text>
             </Pressable>
           </View>
           {!photosComplete && (

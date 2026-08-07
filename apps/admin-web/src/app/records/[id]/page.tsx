@@ -32,6 +32,10 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Shared across status/discrepancy actions so a double-click can't fire two
+  // POSTs — each one writes an audit-log entry, so a duplicate click would
+  // duplicate the log.
+  const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -133,6 +137,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
 
   async function handleSetStatus(status: 'closed' | 'pictures_downloaded' | 'submitted') {
     setError(null);
+    setMutating(true);
     try {
       const res = await apiFetch(`/jobs/${params.id}/status`, {
         method: 'POST',
@@ -147,6 +152,8 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       await loadAuditLog();
     } catch {
       setError('Could not update status. Check your connection.');
+    } finally {
+      setMutating(false);
     }
   }
 
@@ -156,6 +163,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       return;
     }
     setError(null);
+    setMutating(true);
     try {
       const res = await apiFetch(`/jobs/${params.id}/discrepancy`, {
         method: 'POST',
@@ -173,11 +181,14 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       await loadAuditLog();
     } catch {
       setError('Could not flag discrepancy. Check your connection.');
+    } finally {
+      setMutating(false);
     }
   }
 
   async function handleClearDiscrepancy() {
     setError(null);
+    setMutating(true);
     try {
       const res = await apiFetch(`/jobs/${params.id}/discrepancy`, { method: 'DELETE' });
       if (!res.ok) {
@@ -188,6 +199,8 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
       await loadAuditLog();
     } catch {
       setError('Could not clear discrepancy. Check your connection.');
+    } finally {
+      setMutating(false);
     }
   }
 
@@ -326,9 +339,11 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               <label htmlFor="notes">Notes</label>
               <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
-            <button className="form-actions" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
+            <div className="form-actions">
+              <button onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
           </div>
 
           <div
@@ -358,7 +373,9 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               <span className="summary-item-label">Verified address</span>
               <span className="summary-item-value" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
                 {job.verifiedAddressLine1
-                  ? `${job.verifiedAddressLine1}, ${job.verifiedCity} ${job.verifiedState} ${job.verifiedZip ?? ''}`
+                  ? [job.verifiedAddressLine1, [job.verifiedCity, job.verifiedState, job.verifiedZip].filter(Boolean).join(' ')]
+                      .filter(Boolean)
+                      .join(', ')
                   : '—'}
               </span>
             </div>
@@ -385,20 +402,20 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
           </h2>
         </div>
         <div className="field-row">
-          <button onClick={() => handleSetStatus('closed')} disabled={job.status === 'closed'}>
+          <button onClick={() => handleSetStatus('closed')} disabled={mutating || job.status === 'closed'}>
             Mark Closed
           </button>
           <button
             className="btn-secondary"
             onClick={() => handleSetStatus('pictures_downloaded')}
-            disabled={job.status === 'pictures_downloaded'}
+            disabled={mutating || job.status === 'pictures_downloaded'}
           >
             Mark Pictures Downloaded
           </button>
           <button
             className="btn-secondary"
             onClick={() => handleSetStatus('submitted')}
-            disabled={job.status === 'submitted'}
+            disabled={mutating || job.status === 'submitted'}
           >
             Revert to Submitted
           </button>
@@ -420,7 +437,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               {reasons.find((r) => r.id === job.discrepancyReasonId)?.label ?? job.discrepancyReasonId}
             </p>
             {job.discrepancyNotes && <p className="muted">Notes: {job.discrepancyNotes}</p>}
-            <button className="btn-danger" onClick={handleClearDiscrepancy}>
+            <button className="btn-danger" onClick={handleClearDiscrepancy} disabled={mutating}>
               Clear Discrepancy
             </button>
           </div>
@@ -444,7 +461,7 @@ export default function RecordDetailPage({ params }: { params: { id: string } })
               value={discrepancyNotes}
               onChange={(e) => setDiscrepancyNotes(e.target.value)}
             />
-            <button onClick={handleFlagDiscrepancy}>
+            <button onClick={handleFlagDiscrepancy} disabled={mutating}>
               <IconTag /> Flag Discrepancy
             </button>
           </div>

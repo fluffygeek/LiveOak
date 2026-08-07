@@ -34,7 +34,9 @@ export async function sendEmail(args: SendEmailArgs): Promise<void> {
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '<unreadable body>');
-    throw new Error(`Postmark send failed (${res.status}): ${body}`);
+    // Deliberately excludes the response body from the error message — it
+    // can echo back the recipient's email address, which would otherwise
+    // flow straight into logs and Sentry via the caller's catch block.
+    throw new Error(`Postmark send failed (${res.status})`);
   }
 }
