@@ -19,6 +19,10 @@ const updateBody = z.object({
 
 const UNIQUE_VIOLATION = '23505';
 
+// Guards against a malformed :id reaching a uuid-column query and failing
+// with a raw Postgres error (reported as an opaque 500) instead of a 400.
+const idParams = z.object({ id: z.string().uuid() });
+
 /**
  * GET is available to any active user (needed by the technician mobile
  * form's work-code picker); app_admin sees inactive codes too, so they can
@@ -50,6 +54,7 @@ export async function workCodeRoutes(app: FastifyInstance) {
   });
 
   app.patch<{ Params: { id: string } }>('/work-codes/:id', { preHandler: adminGuards }, async (request, reply) => {
+    const { id } = idParams.parse(request.params);
     const body = updateBody.parse(request.body);
     if (Object.keys(body).length === 0) {
       return reply.code(400).send({ error: 'no_fields_to_update' });
@@ -58,7 +63,7 @@ export async function workCodeRoutes(app: FastifyInstance) {
       const [updated] = await app.db
         .update(workCodes)
         .set({ ...body, updatedAt: new Date() })
-        .where(eq(workCodes.id, request.params.id))
+        .where(eq(workCodes.id, id))
         .returning();
       if (!updated) {
         return reply.code(404).send({ error: 'work_code_not_found' });

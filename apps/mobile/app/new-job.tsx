@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { useApiClient } from '../src/lib/api-client';
 import type { JobDraft, JobDraftPhoto, WorkCode } from '../src/lib/types';
 import { Button } from '../src/components/Button';
 import { TextField } from '../src/components/TextField';
-import { colors, radius, spacing } from '../src/theme';
+import { Banner } from '../src/components/Banner';
+import { Card } from '../src/components/Card';
+import { HeaderButton } from '../src/components/HeaderButton';
+import { colors, minTouchTarget, radius, spacing } from '../src/theme';
 
 export default function NewJob() {
   const { apiFetch } = useApiClient();
+  const navigation = useNavigation();
   const [draft, setDraft] = useState<JobDraft | null>(null);
   const [workCodes, setWorkCodes] = useState<WorkCode[]>([]);
   const [photos, setPhotos] = useState<JobDraftPhoto[]>([]);
@@ -18,12 +22,24 @@ export default function NewJob() {
   // Photos loaded from a resumed draft have no download endpoint, so they
   // fall back to a placeholder tile.
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>({});
+  // Set when a photo uploaded to storage successfully but the /confirm call
+  // then failed or timed out — the object already exists in storage (and
+  // may already be confirmed server-side if only the response was lost), so
+  // retrying must reuse this key rather than launching a whole new capture,
+  // which would upload a second object and could double-count toward the
+  // required photo count.
+  const [pendingConfirm, setPendingConfirm] = useState<{ key: string; contentType: string; previewUri: string } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [footageError, setFootageError] = useState<string | null>(null);
 
   // Local editable copies of the form fields.
   const [jobNumber, setJobNumber] = useState('');
@@ -39,43 +55,63 @@ export default function NewJob() {
 
   const selectedWorkCode = workCodes.find((wc) => wc.id === workCodeId);
   const requiredPhotoCount = selectedWorkCode?.requiredPhotoCount ?? 3;
+  const photosRemaining = Math.max(requiredPhotoCount - photos.length, 0);
 
   const loadDraftAndPhotos = useCallback(
-    async (draftId: string) => {
+    async (draftId: string): Promise<boolean> => {
       const res = await apiFetch(`/jobs/draft/${draftId}/photos`);
-      if (res.ok) setPhotos(await res.json());
+      if (!res.ok) return false;
+      setPhotos(await res.json());
+      return true;
     },
     [apiFetch],
   );
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const [draftRes, workCodesRes] = await Promise.all([
-          apiFetch('/jobs/draft', { method: 'POST' }),
-          apiFetch('/work-codes'),
-        ]);
-        if (draftRes.ok) {
-          const d: JobDraft = await draftRes.json();
-          setDraft(d);
-          setJobNumber(d.jobNumber ?? '');
-          setWorkCodeId(d.workCodeId);
-          setFootage(d.footage ?? '');
-          setNotes(d.notes ?? '');
-          setIsNewBuild(d.isNewBuild);
-          setAddressLine1(d.addressLine1 ?? '');
-          setAddressLine2(d.addressLine2 ?? '');
-          setCity(d.city ?? '');
-          setState(d.state ?? '');
-          setZip(d.zip ?? '');
-          await loadDraftAndPhotos(d.id);
-        }
-        if (workCodesRes.ok) setWorkCodes(await workCodesRes.json());
-      } finally {
-        setLoading(false);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const [draftRes, workCodesRes] = await Promise.all([
+        apiFetch('/jobs/draft', { method: 'POST' }),
+        apiFetch('/work-codes'),
+      ]);
+      // All three requests are required for the form to be usable (work
+      // codes drive the photo-count requirement, photos drive the submit
+      // gate) — a partial failure here must fail the whole load rather than
+      // rendering a form with silently-missing data.
+      if (!draftRes.ok || !workCodesRes.ok) {
+        setLoadError(true);
+        return;
       }
-    })();
+      const d: JobDraft = await draftRes.json();
+      const photosLoaded = await loadDraftAndPhotos(d.id);
+      if (!photosLoaded) {
+        setLoadError(true);
+        return;
+      }
+      setDraft(d);
+      setJobNumber(d.jobNumber ?? '');
+      setWorkCodeId(d.workCodeId);
+      setFootage(d.footage ?? '');
+      setNotes(d.notes ?? '');
+      setIsNewBuild(d.isNewBuild);
+      setAddressLine1(d.addressLine1 ?? '');
+      setAddressLine2(d.addressLine2 ?? '');
+      setCity(d.city ?? '');
+      setState(d.state ?? '');
+      setZip(d.zip ?? '');
+      setWorkCodes(await workCodesRes.json());
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFetch, loadDraftAndPhotos]);
+
+  useEffect(() => {
+    // Intentionally run once on mount only — loadAll's identity changes with apiFetch,
+    // and re-running it would clobber in-progress edits with the server's copy.
+    loadAll();
   }, []);
 
   async function saveDraft(): Promise<JobDraft | null> {
@@ -86,13 +122,15 @@ export default function NewJob() {
     let footageValue: number | null;
     if (footage.trim() === '') {
       footageValue = null;
+      setFootageError(null);
     } else {
       const parsed = Number(footage);
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setError('Footage must be a positive number.');
+        setFootageError('Enter a positive number.');
         return null;
       }
       footageValue = parsed;
+      setFootageError(null);
     }
 
     setSaving(true);
@@ -124,6 +162,9 @@ export default function NewJob() {
       const updated: JobDraft = await res.json();
       setDraft(updated);
       return updated;
+    } catch {
+      setError('Could not save. Check your connection and try again.');
+      return null;
     } finally {
       setSaving(false);
     }
@@ -141,13 +182,51 @@ export default function NewJob() {
         return;
       }
       setDraft(await res.json());
+    } catch {
+      setError('Could not reach the address verification service. Check your connection.');
     } finally {
       setVerifying(false);
     }
   }
 
+  // Confirms an object already uploaded to storage. The API's /confirm
+  // endpoint is idempotent on `key`, so calling this again for a key that
+  // actually succeeded server-side last time just returns the existing row
+  // instead of creating a duplicate.
+  async function confirmPhoto(draftId: string, key: string, contentType: string, previewUri: string): Promise<boolean> {
+    const confirmRes = await apiFetch(`/jobs/draft/${draftId}/photos/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, contentType }),
+    });
+    if (!confirmRes.ok) {
+      setPendingConfirm({ key, contentType, previewUri });
+      setError('Photo uploaded but could not be confirmed. Tap Add Photo again to retry.');
+      return false;
+    }
+    const confirmed: JobDraftPhoto = await confirmRes.json();
+    setPendingConfirm(null);
+    setPhotos((prev) => (prev.some((p) => p.id === confirmed.id) ? prev : [...prev, confirmed]));
+    setPhotoPreviews((prev) => ({ ...prev, [confirmed.id]: previewUri }));
+    return true;
+  }
+
   async function handleAddPhoto() {
     if (!draft) return;
+
+    if (pendingConfirm) {
+      setUploading(true);
+      setError(null);
+      try {
+        await confirmPhoto(draft.id, pendingConfirm.key, pendingConfirm.contentType, pendingConfirm.previewUri);
+      } catch {
+        setError('Could not reach the server. Check your connection and try again.');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Camera permission required', 'Enable camera access to attach job photos.');
@@ -176,26 +255,19 @@ export default function NewJob() {
       const blob = await fileRes.blob();
       const putRes = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: blob });
       if (!putRes.ok) {
-        setError('Photo upload to storage failed.');
+        setError('Photo upload to storage failed. Try again.');
         return;
       }
 
-      const confirmRes = await apiFetch(`/jobs/draft/${draft.id}/photos/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, contentType }),
-      });
-      if (confirmRes.ok) {
-        const confirmed: JobDraftPhoto = await confirmRes.json();
-        setPhotos((prev) => [...prev, confirmed]);
-        setPhotoPreviews((prev) => ({ ...prev, [confirmed.id]: asset.uri }));
-      }
+      await confirmPhoto(draft.id, key, contentType, asset.uri);
+    } catch {
+      setError('Photo upload failed. Check your connection and try again.');
     } finally {
       setUploading(false);
     }
   }
 
-  async function handleDiscard() {
+  const handleDiscard = useCallback(() => {
     if (!draft) return;
     Alert.alert('Discard job?', 'This will permanently delete this in-progress job and its photos.', [
       { text: 'Cancel', style: 'cancel' },
@@ -203,6 +275,7 @@ export default function NewJob() {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
+          setDiscarding(true);
           try {
             const res = await apiFetch(`/jobs/draft/${draft.id}`, { method: 'DELETE' });
             if (!res.ok) {
@@ -212,16 +285,40 @@ export default function NewJob() {
           } catch {
             setError('Could not discard this job. Check your connection.');
             return;
+          } finally {
+            setDiscarding(false);
           }
           router.replace('/home');
         },
       },
     ]);
-  }
+  }, [apiFetch, draft]);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => <HeaderButton title="Discard" onPress={handleDiscard} tone="danger" loading={discarding} />,
+    });
+  }, [navigation, handleDiscard, discarding]);
 
   async function handleSubmit() {
     const saved = await saveDraft();
     if (!saved) return;
+    // Re-derive from the just-saved draft, not the pre-save `addressVerified`/
+    // `photosComplete` closure values below — editing the address resets
+    // verification server-side (see PATCH /jobs/draft/:id), so a save that
+    // touched the address can flip `saved` back to unsubmittable even though
+    // the render this closure came from still showed it as verified.
+    const savedAddressVerified = ['verified', 'skipped_new_build', 'unavailable'].includes(
+      saved.addressVerificationStatus,
+    );
+    if (!savedAddressVerified) {
+      setError('The address changed and needs to be verified again before this job can be submitted.');
+      return;
+    }
+    if (photos.length < requiredPhotoCount) {
+      setError(`Add ${requiredPhotoCount - photos.length} more photo${requiredPhotoCount - photos.length === 1 ? '' : 's'} before submitting.`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -233,121 +330,232 @@ export default function NewJob() {
       }
       Alert.alert('Job submitted', 'Your job has been recorded.');
       router.replace('/home');
+    } catch {
+      setError('Could not submit. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (loading || !draft) {
+  if (loading) {
     return (
       <View style={styles.center}>
-        <Text style={styles.muted}>Loading…</Text>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.loadingLabel}>Loading job…</Text>
       </View>
     );
   }
 
-  const canSubmit =
-    ['verified', 'skipped_new_build', 'unavailable'].includes(draft.addressVerificationStatus) &&
-    photos.length >= requiredPhotoCount;
+  if (loadError || !draft) {
+    return (
+      <View style={[styles.center, { padding: spacing.xl, gap: spacing.md }]}>
+        <Banner tone="danger" message="Could not load this job. Check your connection and try again." />
+        <Button title="Retry" onPress={loadAll} variant="secondary" />
+      </View>
+    );
+  }
+
+  const addressVerified = ['verified', 'skipped_new_build', 'unavailable'].includes(draft.addressVerificationStatus);
+  const photosComplete = photos.length >= requiredPhotoCount;
+  const canSubmit = addressVerified && photosComplete;
+
+  const blockers: string[] = [];
+  if (!addressVerified) blockers.push('Verify the address');
+  if (!photosComplete) blockers.push(`Add ${photosRemaining} more photo${photosRemaining === 1 ? '' : 's'}`);
 
   return (
-    <ScrollView contentContainerStyle={styles.container} style={{ backgroundColor: colors.bg }}>
-      <TextField label="Job ID" value={jobNumber} onChangeText={setJobNumber} placeholder="Job number" />
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        {error && <Banner tone="danger" message={error} />}
 
-      <View>
-        <Text style={styles.sectionLabel}>Work Code</Text>
-        <View style={styles.chipRow}>
-          {workCodes.map((wc) => (
+        <ChecklistSummary addressVerified={addressVerified} photosComplete={photosComplete} photosLabel={`${photos.length}/${requiredPhotoCount}`} />
+
+        <Card style={styles.section}>
+          <TextField label="Job ID" value={jobNumber} onChangeText={setJobNumber} placeholder="Job number" />
+
+          <View>
+            <Text style={styles.sectionLabel}>Work Code</Text>
+            <View style={styles.chipRow}>
+              {workCodes.map((wc) => {
+                const selected = wc.id === workCodeId;
+                return (
+                  <Pressable
+                    key={wc.id}
+                    onPress={() => setWorkCodeId(wc.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={wc.description ? `${wc.code}: ${wc.description}` : wc.code}
+                    style={[styles.chip, selected && styles.chipSelected]}
+                  >
+                    {selected && <Text style={styles.chipCheck}>✓ </Text>}
+                    <Text style={[styles.chipLabel, selected && styles.chipLabelSelected]}>{wc.code}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {selectedWorkCode?.description && <Text style={styles.muted}>{selectedWorkCode.description}</Text>}
+          </View>
+
+          <TextField
+            label="Footage"
+            value={footage}
+            onChangeText={(v) => {
+              setFootage(v);
+              if (footageError) setFootageError(null);
+            }}
+            keyboardType="numeric"
+            error={footageError}
+          />
+
+          <View style={styles.row}>
+            <Text style={styles.sectionLabel}>New build (skip USPS verification)</Text>
+            <Switch value={isNewBuild} onValueChange={setIsNewBuild} trackColor={{ true: colors.primary }} />
+          </View>
+
+          <TextField label="Notes" value={notes} onChangeText={setNotes} style={styles.notesInput} multiline />
+
+          <Button title="Save Draft" onPress={saveDraft} loading={saving} variant="secondary" />
+        </Card>
+
+        <Card style={styles.section}>
+          <Text style={styles.sectionLabel}>Address</Text>
+          <TextField label="Line 1" value={addressLine1} onChangeText={setAddressLine1} required />
+          <TextField label="Line 2 (optional)" value={addressLine2} onChangeText={setAddressLine2} />
+          <TextField label="City" value={city} onChangeText={setCity} required />
+          <TextField label="State" value={state} onChangeText={setState} maxLength={2} required />
+          <TextField label="ZIP" value={zip} onChangeText={setZip} keyboardType="numeric" required />
+
+          <Button
+            title={verifying ? 'Verifying…' : 'Verify Address'}
+            onPress={handleVerifyAddress}
+            loading={verifying}
+            variant="secondary"
+          />
+          <AddressVerificationStatus draft={draft} />
+        </Card>
+
+        <Card style={styles.section}>
+          <Text style={styles.sectionLabel}>Photos ({photos.length} of {requiredPhotoCount} required)</Text>
+          <View style={styles.chipRow}>
+            {photos.map((p) =>
+              photoPreviews[p.id] ? (
+                <Image key={p.id} source={{ uri: photoPreviews[p.id] }} style={styles.photoThumb} />
+              ) : (
+                <View key={p.id} style={styles.photoPlaceholder}>
+                  <Text style={styles.photoPlaceholderLabel}>📷</Text>
+                </View>
+              ),
+            )}
             <Pressable
-              key={wc.id}
-              onPress={() => setWorkCodeId(wc.id)}
-              style={[styles.chip, wc.id === workCodeId && styles.chipSelected]}
+              onPress={handleAddPhoto}
+              disabled={uploading}
+              accessibilityRole="button"
+              accessibilityLabel={pendingConfirm ? 'Retry confirming photo' : 'Add photo'}
+              style={[styles.photoAddTile, uploading && styles.disabled]}
             >
-              <Text style={[styles.chipLabel, wc.id === workCodeId && styles.chipLabelSelected]}>{wc.code}</Text>
+              <Text style={styles.photoAddIcon}>{uploading ? '…' : pendingConfirm ? '↻' : '＋'}</Text>
+              <Text style={styles.photoAddLabel}>{uploading ? 'Uploading' : pendingConfirm ? 'Retry' : 'Add Photo'}</Text>
             </Pressable>
-          ))}
-        </View>
-        {selectedWorkCode && (
-          <Text style={styles.muted}>
-            {photos.length} of {selectedWorkCode.requiredPhotoCount} photos required
+          </View>
+          {!photosComplete && (
+            <Text style={styles.photoHint}>
+              {photosRemaining} more photo{photosRemaining === 1 ? '' : 's'} required before you can submit.
+            </Text>
+          )}
+        </Card>
+      </ScrollView>
+
+      <View style={styles.footer}>
+        {blockers.length > 0 && (
+          <Text style={styles.footerBlockers} numberOfLines={2}>
+            Before you submit: {blockers.join(' · ')}
           </Text>
         )}
+        <Button
+          title={submitting ? 'Submitting…' : 'Submit Job'}
+          onPress={handleSubmit}
+          disabled={!canSubmit}
+          loading={submitting}
+        />
       </View>
+    </View>
+  );
+}
 
-      <TextField label="Footage" value={footage} onChangeText={setFootage} keyboardType="numeric" />
+function ChecklistSummary({
+  addressVerified,
+  photosComplete,
+  photosLabel,
+}: {
+  addressVerified: boolean;
+  photosComplete: boolean;
+  photosLabel: string;
+}) {
+  return (
+    <View style={styles.checklist}>
+      <ChecklistItem done={addressVerified} label="Address verified" />
+      <ChecklistItem done={photosComplete} label={`Photos ${photosLabel}`} />
+    </View>
+  );
+}
 
-      <View style={styles.row}>
-        <Text style={styles.sectionLabel}>New build (skip USPS verification)</Text>
-        <Switch value={isNewBuild} onValueChange={setIsNewBuild} trackColor={{ true: colors.primary }} />
-      </View>
-
-      <View style={styles.addressGroup}>
-        <Text style={styles.sectionLabel}>Address</Text>
-        <TextField label="Line 1" value={addressLine1} onChangeText={setAddressLine1} />
-        <TextField label="Line 2 (optional)" value={addressLine2} onChangeText={setAddressLine2} />
-        <TextField label="City" value={city} onChangeText={setCity} />
-        <TextField label="State" value={state} onChangeText={setState} maxLength={2} />
-        <TextField label="ZIP" value={zip} onChangeText={setZip} keyboardType="numeric" />
-      </View>
-
-      <Button title={verifying ? 'Verifying…' : 'Verify Address'} onPress={handleVerifyAddress} loading={verifying} variant="secondary" />
-      <AddressVerificationStatus draft={draft} />
-
-      <TextField label="Notes" value={notes} onChangeText={setNotes} style={styles.notesInput} multiline />
-
-      <Button title="Save" onPress={saveDraft} loading={saving} variant="secondary" />
-
-      <View>
-        <Text style={styles.sectionLabel}>Photos ({photos.length})</Text>
-        <View style={styles.chipRow}>
-          {photos.map((p) =>
-            photoPreviews[p.id] ? (
-              <Image key={p.id} source={{ uri: photoPreviews[p.id] }} style={styles.photoThumb} />
-            ) : (
-              <View key={p.id} style={styles.photoPlaceholder}>
-                <Text style={styles.photoPlaceholderLabel}>Photo</Text>
-              </View>
-            ),
-          )}
-        </View>
-      </View>
-      <Button title={uploading ? 'Uploading…' : 'Add Photo'} onPress={handleAddPhoto} loading={uploading} variant="secondary" />
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <Button title={submitting ? 'Submitting…' : 'Submit Job'} onPress={handleSubmit} disabled={!canSubmit} loading={submitting} />
-      <Button title="Discard Job" onPress={handleDiscard} variant="danger" />
-    </ScrollView>
+function ChecklistItem({ done, label }: { done: boolean; label: string }) {
+  return (
+    <View style={[styles.checklistItem, done ? styles.checklistItemDone : styles.checklistItemPending]}>
+      <Text style={[styles.checklistIcon, { color: done ? colors.success : colors.warning }]}>{done ? '✓' : '○'}</Text>
+      <Text style={[styles.checklistLabel, { color: done ? colors.success : colors.warning }]}>{label}</Text>
+    </View>
   );
 }
 
 function AddressVerificationStatus({ draft }: { draft: JobDraft }) {
-  const label: Record<JobDraft['addressVerificationStatus'], string> = {
-    pending: 'Not yet verified',
-    verified: `✅ Verified: ${draft.verifiedAddressLine1}, ${draft.verifiedCity}, ${draft.verifiedState} ${draft.verifiedZip}`,
-    failed: '⚠️ USPS could not match this address — please correct it.',
-    skipped_new_build: '⏭️ Skipped (new build)',
-    unavailable: '⚫ USPS unavailable — flagged for payroll admin follow-up.',
+  const config: Record<JobDraft['addressVerificationStatus'], { text: string; color: string; icon: string }> = {
+    pending: { text: 'Not yet verified', color: colors.textMuted, icon: '○' },
+    verified: {
+      text: `Verified: ${draft.verifiedAddressLine1}, ${draft.verifiedCity}, ${draft.verifiedState} ${draft.verifiedZip}`,
+      color: colors.success,
+      icon: '✓',
+    },
+    failed: { text: 'USPS could not match this address — please correct it.', color: colors.danger, icon: '✕' },
+    skipped_new_build: { text: 'Skipped (new build)', color: colors.textMuted, icon: '⏭' },
+    unavailable: { text: 'USPS unavailable — flagged for payroll admin follow-up.', color: colors.warning, icon: '⚠' },
   };
-  return <Text style={styles.muted}>{label[draft.addressVerificationStatus]}</Text>;
+  const { text, color, icon } = config[draft.addressVerificationStatus];
+  return (
+    <View style={styles.verifyStatusRow}>
+      <Text style={[styles.verifyStatusIcon, { color }]}>{icon}</Text>
+      <Text style={[styles.verifyStatusText, { color }]}>{text}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
   container: {
     padding: spacing.lg,
     gap: spacing.md,
+    // Leave room so the last field isn't hidden behind the sticky submit footer.
+    paddingBottom: spacing.xxl,
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
+    gap: spacing.md,
+  },
+  loadingLabel: {
+    color: colors.textMuted,
+    fontSize: 15,
   },
   muted: {
     color: colors.textMuted,
   },
-  error: {
-    color: colors.danger,
+  disabled: {
+    opacity: 0.5,
   },
   sectionLabel: {
     fontWeight: '600',
@@ -360,9 +568,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+    minHeight: minTouchTarget,
   },
-  addressGroup: {
-    gap: spacing.sm,
+  section: {
+    gap: spacing.md,
   },
   notesInput: {
     height: 80,
@@ -375,23 +584,34 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    minHeight: minTouchTarget,
+    minWidth: minTouchTarget,
     borderRadius: radius,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   chipSelected: {
     borderColor: colors.primary,
-    backgroundColor: '#eef2fd',
+    borderWidth: 2,
+    backgroundColor: colors.infoBg,
+  },
+  chipCheck: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   chipLabel: {
     color: colors.text,
+    fontSize: 15,
   },
   chipLabelSelected: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   photoThumb: {
     width: 72,
@@ -410,7 +630,90 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   photoPlaceholderLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
+    fontSize: 22,
+  },
+  photoAddTile: {
+    width: 72,
+    height: 72,
+    borderRadius: radius,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  photoAddIcon: {
+    fontSize: 20,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  photoAddLabel: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  photoHint: {
+    color: colors.warning,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: spacing.xs,
+  },
+  checklist: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  checklistItemDone: {
+    backgroundColor: colors.successBg,
+    borderColor: colors.success,
+  },
+  checklistItemPending: {
+    backgroundColor: colors.warningBg,
+    borderColor: colors.warning,
+  },
+  checklistIcon: {
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  checklistLabel: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  verifyStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+  verifyStatusIcon: {
+    fontWeight: '700',
+  },
+  verifyStatusText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  footer: {
+    padding: spacing.lg,
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  footerBlockers: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.warning,
+    textAlign: 'center',
   },
 });

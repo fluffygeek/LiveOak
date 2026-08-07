@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { router, useNavigation } from 'expo-router';
 import { useAuth } from '../src/lib/auth-context';
 import { useApiClient } from '../src/lib/api-client';
 import type { JobDraft } from '../src/lib/types';
 import { Button } from '../src/components/Button';
 import { Card } from '../src/components/Card';
+import { Banner } from '../src/components/Banner';
+import { HeaderButton } from '../src/components/HeaderButton';
 import { colors, spacing } from '../src/theme';
 
 /**
@@ -18,9 +20,23 @@ import { colors, spacing } from '../src/theme';
 export default function Home() {
   const { user, signOut } = useAuth();
   const { apiFetch } = useApiClient();
+  const navigation = useNavigation();
   const [draft, setDraft] = useState<JobDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+
+  function confirmSignOut() {
+    Alert.alert('Sign out?', "You'll need to sign in again to log jobs.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => <HeaderButton title="Sign Out" onPress={confirmSignOut} />,
+    });
+  }, [navigation]);
 
   const loadDraft = useCallback(async () => {
     setLoading(true);
@@ -48,7 +64,8 @@ export default function Home() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.loadingLabel}>Loading your account…</Text>
       </View>
     );
   }
@@ -56,7 +73,7 @@ export default function Home() {
   if (loadError) {
     return (
       <View style={[styles.center, { padding: spacing.xl, gap: spacing.md }]}>
-        <Text style={styles.muted}>Could not load your account. Check your connection and try again.</Text>
+        <Banner tone="danger" message="Could not load your account. Check your connection and try again." />
         <Button title="Retry" onPress={loadDraft} variant="secondary" />
       </View>
     );
@@ -68,8 +85,8 @@ export default function Home() {
 
       {hasInProgressWork ? (
         <Card style={styles.resumeCard}>
-          <Text style={styles.resumeTitle}>Resume in-progress job</Text>
-          <Text style={styles.muted}>
+          <Text style={styles.resumeTitle}>🕐 Resume in-progress job</Text>
+          <Text style={styles.resumeBody}>
             You must submit this job — or discard it — before starting another. Only one job may be in
             progress at a time.
           </Text>
@@ -80,7 +97,6 @@ export default function Home() {
       )}
 
       <Button title="My Weekly Jobs" onPress={() => router.push('/weekly')} variant="secondary" />
-      <Button title="Sign Out" onPress={() => signOut()} variant="danger" />
     </View>
   );
 }
@@ -97,6 +113,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
+    gap: spacing.md,
+  },
+  loadingLabel: {
+    color: colors.textMuted,
+    fontSize: 15,
   },
   signedInAs: {
     fontSize: 15,
@@ -109,9 +130,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.warningBg,
     borderColor: colors.warning,
+    borderWidth: 1.5,
   },
   resumeTitle: {
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
     color: colors.warning,
+  },
+  resumeBody: {
+    color: colors.text,
   },
 });

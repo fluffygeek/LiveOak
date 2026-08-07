@@ -4,6 +4,7 @@ import { jobs, users, workCodes, discrepancyReasons, distributionList, type Db }
 import type { Env } from '../env.js';
 import { sendEmail } from '../lib/postmark.js';
 import { logger } from '../lib/logger.js';
+import { captureException } from '../lib/sentry.js';
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -105,14 +106,28 @@ export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promis
   const html = renderHtml(flagged);
   const subject = `LiveOak: ${flagged.length} discrepanc${flagged.length === 1 ? 'y' : 'ies'} flagged`;
 
+  // One recipient at a time, and a send failure for one (bad address,
+  // Postmark rejecting it, etc.) must not stop the rest from being sent —
+  // an unhandled throw here would abort the loop, and since `recipients` is
+  // read in the same order every run, that one bad address would silently
+  // block every recipient after it in the list on every future run too.
+  let failureCount = 0;
   for (const recipient of recipients) {
-    await sendEmail({
-      serverToken: env.POSTMARK_SERVER_TOKEN,
-      from: env.DIGEST_EMAIL_FROM,
-      to: recipient.email,
-      subject,
-      htmlBody: html,
-    });
+    try {
+      await sendEmail({
+        serverToken: env.POSTMARK_SERVER_TOKEN,
+        from: env.DIGEST_EMAIL_FROM,
+        to: recipient.email,
+        subject,
+        htmlBody: html,
+      });
+    } catch (err) {
+      failureCount += 1;
+      // recipient.id, not .email — the email address is PII and shouldn't
+      // flow into logs/Sentry; the id is enough to look the recipient up.
+      logger.error({ err, recipientId: recipient.id }, 'sendDiscrepancyDigest: failed to send to recipient');
+      captureException(err);
+    }
   }
 
   const now = new Date();
@@ -124,4 +139,11 @@ export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promis
         .where(and(eq(jobs.id, row.jobId), eq(jobs.state, row.state)));
     }
   });
+
+  // Surface partial failure to BullMQ (retry/alerting) without having
+  // skipped any deliverable recipient or left discrepancyLastNotifiedAt
+  // unset for the ones that did go out.
+  if (failureCount > 0) {
+    throw new Error(`sendDiscrepancyDigest: failed to send to ${failureCount}/${recipients.length} recipient(s)`);
+  }
 }

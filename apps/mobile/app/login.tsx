@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '../src/lib/auth-context';
 import { signInWithGoogle, isSignInCancelled } from '../src/lib/google-signin';
 import { Button } from '../src/components/Button';
+import { Banner } from '../src/components/Banner';
 import { colors, spacing } from '../src/theme';
 
 export default function Login() {
@@ -31,9 +32,16 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>LiveOak Technician</Text>
-      <Button title={signingIn ? 'Signing in…' : 'Sign in with Google'} onPress={handleSignIn} loading={signingIn} />
-      {error && <Text style={styles.error}>{error}</Text>}
+      <View style={styles.brand}>
+        <Text style={styles.logo}>🛠️</Text>
+        <Text style={styles.title}>LiveOak</Text>
+        <Text style={styles.subtitle}>Sign in with your company Google account to log jobs.</Text>
+      </View>
+
+      <View style={styles.actions}>
+        <Button title={signingIn ? 'Signing in…' : 'Sign in with Google'} onPress={handleSignIn} loading={signingIn} />
+        {error && <Banner tone="danger" message={error} />}
+      </View>
     </View>
   );
 }
@@ -41,19 +49,32 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
     padding: spacing.xl,
-    gap: spacing.lg,
+    gap: spacing.xxl,
     backgroundColor: colors.bg,
   },
+  brand: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  logo: {
+    fontSize: 48,
+    marginBottom: spacing.xs,
+  },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: '700',
     color: colors.text,
   },
-  error: {
-    color: colors.danger,
+  subtitle: {
+    fontSize: 15,
+    color: colors.textMuted,
     textAlign: 'center',
+    maxWidth: 280,
+  },
+  actions: {
+    gap: spacing.md,
   },
 });
