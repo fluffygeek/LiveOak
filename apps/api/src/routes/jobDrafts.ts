@@ -40,6 +40,13 @@ const confirmPhotoBody = z.object({
   contentType: z.string().min(1),
 });
 
+// Path params are attacker-controlled free text until validated — an
+// id that isn't a well-formed UUID would otherwise reach a `eq(column, id)`
+// query against a uuid column and fail with a raw Postgres 22P02 error,
+// which the global error handler can't distinguish from a real server
+// error and reports as a 500 instead of the 400 this actually is.
+const draftIdParams = z.object({ id: z.string().uuid() });
+
 const ADDRESS_FIELDS = ['addressLine1', 'addressLine2', 'city', 'state', 'zip', 'isNewBuild'] as const;
 
 function touchesAddress(body: Record<string, unknown>): boolean {
@@ -92,8 +99,9 @@ export async function jobDraftRoutes(app: FastifyInstance) {
   });
 
   app.patch<{ Params: { id: string } }>('/jobs/draft/:id', { preHandler: guards }, async (request, reply) => {
+    const { id } = draftIdParams.parse(request.params);
     const body = draftPatchBody.parse(request.body);
-    const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+    const draft = await loadOwnedDraft(request.currentUser!.id, id);
     if (!draft) {
       return reply.code(404).send({ error: 'draft_not_found' });
     }
@@ -120,7 +128,8 @@ export async function jobDraftRoutes(app: FastifyInstance) {
 
   // Self-service discard, per design plan §10 item 2.
   app.delete<{ Params: { id: string } }>('/jobs/draft/:id', { preHandler: guards }, async (request, reply) => {
-    const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+    const { id } = draftIdParams.parse(request.params);
+    const draft = await loadOwnedDraft(request.currentUser!.id, id);
     if (!draft) {
       return reply.code(404).send({ error: 'draft_not_found' });
     }
@@ -129,7 +138,8 @@ export async function jobDraftRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/jobs/draft/:id/photos', { preHandler: guards }, async (request, reply) => {
-    const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+    const { id } = draftIdParams.parse(request.params);
+    const draft = await loadOwnedDraft(request.currentUser!.id, id);
     if (!draft) {
       return reply.code(404).send({ error: 'draft_not_found' });
     }
@@ -141,11 +151,12 @@ export async function jobDraftRoutes(app: FastifyInstance) {
     '/jobs/draft/:id/photos/presign',
     { preHandler: guards },
     async (request, reply) => {
+      const { id } = draftIdParams.parse(request.params);
       const body = presignBody.parse(request.body);
       if (!isAllowedPhotoContentType(body.contentType)) {
         return reply.code(400).send({ error: 'unsupported_content_type' });
       }
-      const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+      const draft = await loadOwnedDraft(request.currentUser!.id, id);
       if (!draft) {
         return reply.code(404).send({ error: 'draft_not_found' });
       }
@@ -166,8 +177,9 @@ export async function jobDraftRoutes(app: FastifyInstance) {
     '/jobs/draft/:id/photos/confirm',
     { preHandler: guards },
     async (request, reply) => {
+      const { id } = draftIdParams.parse(request.params);
       const body = confirmPhotoBody.parse(request.body);
-      const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+      const draft = await loadOwnedDraft(request.currentUser!.id, id);
       if (!draft) {
         return reply.code(404).send({ error: 'draft_not_found' });
       }
@@ -180,11 +192,24 @@ export async function jobDraftRoutes(app: FastifyInstance) {
       if (!(await objectExists(app.s3, app.env.S3_BUCKET, body.key))) {
         return reply.code(400).send({ error: 'photo_not_uploaded' });
       }
-      const [photo] = await app.db
-        .insert(jobDraftPhotos)
-        .values({ draftId: draft.id, s3Key: body.key, contentType: body.contentType })
-        .returning();
-      return reply.code(201).send(photo);
+      try {
+        const [photo] = await app.db
+          .insert(jobDraftPhotos)
+          .values({ draftId: draft.id, s3Key: body.key, contentType: body.contentType })
+          .returning();
+        return reply.code(201).send(photo);
+      } catch (err) {
+        // s3Key is unique. A client retry (network blip after the first
+        // confirm actually succeeded) would otherwise hit a raw Postgres
+        // unique-violation and get an opaque 500 — make the endpoint
+        // idempotent instead by returning the already-registered row.
+        if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;
+        const [existing] = await app.db.select().from(jobDraftPhotos).where(eq(jobDraftPhotos.s3Key, body.key));
+        if (existing && existing.draftId === draft.id) {
+          return reply.code(200).send(existing);
+        }
+        throw err;
+      }
     },
   );
 
@@ -192,7 +217,8 @@ export async function jobDraftRoutes(app: FastifyInstance) {
     '/jobs/draft/:id/verify-address',
     { preHandler: guards },
     async (request, reply) => {
-      const draft = await loadOwnedDraft(request.currentUser!.id, request.params.id);
+      const { id } = draftIdParams.parse(request.params);
+      const draft = await loadOwnedDraft(request.currentUser!.id, id);
       if (!draft) {
         return reply.code(404).send({ error: 'draft_not_found' });
       }
@@ -236,7 +262,7 @@ export async function jobDraftRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>('/jobs/draft/:id/submit', { preHandler: guards }, async (request, reply) => {
     const technicianId = request.currentUser!.id;
-    const draftId = request.params.id;
+    const { id: draftId } = draftIdParams.parse(request.params);
 
     // Pre-transaction checks give fast, specific error responses for the
     // common case (incomplete form, missing photos). The transaction below
