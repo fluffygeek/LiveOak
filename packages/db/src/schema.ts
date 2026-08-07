@@ -7,6 +7,7 @@ import {
   boolean,
   numeric,
   timestamp,
+  date,
   jsonb,
   bigserial,
   integer,
@@ -244,6 +245,29 @@ export const distributionList = pgTable('distribution_list', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * One row per (run_date, recipient) the nightly discrepancy digest has
+ * actually delivered to — lets a re-trigger of the same night's run (manual
+ * retry, or a future BullMQ `attempts` > 1 config) skip recipients who
+ * already got it instead of re-sending. `run_date` is the America/Chicago
+ * calendar date the digest was for, not a literal timestamp — see
+ * apps/worker/src/jobs/discrepancyDigest.ts.
+ */
+export const discrepancyDigestDeliveries = pgTable(
+  'discrepancy_digest_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runDate: date('run_date', { mode: 'string' }).notNull(),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => distributionList.id),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueRunRecipient: unique().on(table.runDate, table.recipientId),
+  }),
+);
 
 export const appConfig = pgTable('app_config', {
   key: text('key').primaryKey(),

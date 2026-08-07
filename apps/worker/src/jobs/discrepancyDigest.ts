@@ -1,6 +1,15 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Job } from 'bullmq';
-import { jobs, users, workCodes, discrepancyReasons, distributionList, type Db } from '@liveoak/db';
+import { DateTime } from 'luxon';
+import {
+  jobs,
+  users,
+  workCodes,
+  discrepancyReasons,
+  distributionList,
+  discrepancyDigestDeliveries,
+  type Db,
+} from '@liveoak/db';
 import type { Env } from '../env.js';
 import { sendEmail } from '../lib/postmark.js';
 import { logger } from '../lib/logger.js';
@@ -64,16 +73,42 @@ function renderHtml(rows: DigestRow[]): string {
  * (cleared or the job edited) — the documented default assumption (design
  * plan §10 item 5) rather than a once-only send. `discrepancy_last_notified_at`
  * is stamped for visibility but doesn't gate whether a job is included.
+ *
+ * Within a single night, though, delivery is idempotent per recipient:
+ * BullMQ jobs here run with the default `attempts: 1` (no automatic retry),
+ * but a re-trigger of the *same* night's run — a manual retry via the
+ * internal ops endpoint, or a future `attempts` > 1 config — must not
+ * re-send to recipients who already got it. `discrepancy_digest_deliveries`
+ * tracks that per (run_date, recipient), where run_date is derived from
+ * this job's scheduled time, not wall-clock send time, so a run that starts
+ * just before midnight Central and finishes after still counts as one night.
  */
-export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promise<void> {
+export async function sendDiscrepancyDigest(db: Db, env: Env, job: Job): Promise<void> {
   if (!env.POSTMARK_SERVER_TOKEN || !env.DIGEST_EMAIL_FROM) {
     logger.warn('sendDiscrepancyDigest: POSTMARK_SERVER_TOKEN/DIGEST_EMAIL_FROM not configured, skipping run.');
     return;
   }
 
-  const recipients = await db.select().from(distributionList).where(eq(distributionList.active, true));
-  if (recipients.length === 0) {
+  const runDate = DateTime.fromMillis(job.timestamp, { zone: 'America/Chicago' }).toISODate();
+  if (!runDate) {
+    throw new Error(`sendDiscrepancyDigest: could not derive a run date from job.timestamp (${job.timestamp})`);
+  }
+
+  const activeRecipients = await db.select().from(distributionList).where(eq(distributionList.active, true));
+  if (activeRecipients.length === 0) {
     logger.info('sendDiscrepancyDigest: no active distribution_list recipients, skipping run.');
+    return;
+  }
+
+  const alreadyDelivered = await db
+    .select({ recipientId: discrepancyDigestDeliveries.recipientId })
+    .from(discrepancyDigestDeliveries)
+    .where(eq(discrepancyDigestDeliveries.runDate, runDate));
+  const alreadyDeliveredIds = new Set(alreadyDelivered.map((row) => row.recipientId));
+  const recipients = activeRecipients.filter((r) => !alreadyDeliveredIds.has(r.id));
+
+  if (recipients.length === 0) {
+    logger.info({ runDate }, 'sendDiscrepancyDigest: every active recipient already delivered for this run, skipping.');
     return;
   }
 
@@ -121,6 +156,15 @@ export async function sendDiscrepancyDigest(db: Db, env: Env, _job: Job): Promis
         subject,
         htmlBody: html,
       });
+      // Recorded immediately (not batched with the other recipients or the
+      // discrepancyLastNotifiedAt stamp below) so a later recipient's
+      // failure in this same loop can't roll back a delivery that already
+      // went out. onConflictDoNothing guards against a race with another
+      // overlapping trigger recording the same (runDate, recipientId).
+      await db
+        .insert(discrepancyDigestDeliveries)
+        .values({ runDate, recipientId: recipient.id })
+        .onConflictDoNothing({ target: [discrepancyDigestDeliveries.runDate, discrepancyDigestDeliveries.recipientId] });
     } catch (err) {
       failureCount += 1;
       // recipient.id, not .email — the email address is PII and shouldn't
